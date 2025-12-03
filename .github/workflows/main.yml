@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - "**/*.md"
+      - "**/*.org"
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        emacs_version:
+          - snapshot
+    steps:
+      - uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs_version }}
+
+      - uses: actions/checkout@v4
+
+      - name: Install Eldev
+        run: curl -fsSL https://raw.github.com/doublep/eldev/0.10.3/webinstall/github-eldev | sh
+
+      - name: Install dependencies
+        run: make prepare
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make test

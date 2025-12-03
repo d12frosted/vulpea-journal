@@ -1,0 +1,8 @@
+# Eldev
+.eldev/
+*.elc
+
+# Emacs
+*~
+\#*\#
+.\#*
