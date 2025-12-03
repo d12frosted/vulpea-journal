@@ -85,12 +85,12 @@
   :group 'vulpea-journal)
 
 (defface vulpea-journal-ui-header
-  '((t :inherit bold :height 1.2))
+  '((t :inherit org-level-1))
   "Face for journal header."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-widget-title
-  '((t :inherit bold))
+  '((t :inherit org-level-2))
   "Face for widget titles."
   :group 'vulpea-journal-ui)
 
@@ -161,7 +161,7 @@ Example:
   (let ((set-date (use-vui-journal-set-date)))
     (vui-hstack
      :spacing 1
-     (vui-button "< Yesterday"
+     (vui-button "< Prev"
        :on-click (lambda ()
                    (let ((date (use-vui-journal-date)))
                      (funcall set-date
@@ -169,7 +169,7 @@ Example:
      (vui-button "Today"
        :on-click (lambda ()
                    (funcall set-date (current-time))))
-     (vui-button "Tomorrow >"
+     (vui-button "Next >"
        :on-click (lambda ()
                    (let ((date (use-vui-journal-date)))
                      (funcall set-date
@@ -264,7 +264,6 @@ SET-DATE is callback to change date."
     (vui-vstack
      ;; Widget title
      (vui-text "Calendar" :face 'vulpea-journal-ui-widget-title)
-     (vui-newline)
      ;; Month/year header with navigation
      (vui-hstack
       :spacing 1
@@ -330,24 +329,17 @@ SET-DATE is callback to change date."
           (loading t)
           (collapsed nil))
 
-  :on-mount
-  (let ((date (use-vui-journal-date)))
-    (vui-batch
-     (vui-set-state :notes (vulpea-journal-ui--query-created-today date))
-     (vui-set-state :loading nil)))
+  :render
+  (let* ((date (use-vui-journal-date))
+         (count (length notes)))
 
-  :on-update
-  ;; Reload when date changes
-  (let ((date (use-vui-journal-date))
-        (prev-date (plist-get prev-props :date)))
-    (unless (equal date prev-date)
+    ;; Reload when date changes
+    (use-effect (date)
       (vui-batch
        (vui-set-state :loading t)
        (vui-set-state :notes (vulpea-journal-ui--query-created-today date))
-       (vui-set-state :loading nil))))
+       (vui-set-state :loading nil)))
 
-  :render
-  (let ((count (length notes)))
     (vui-vstack
      ;; Header
      (vui-hstack
@@ -385,23 +377,17 @@ SET-DATE is callback to change date."
           (loading t)
           (collapsed nil))
 
-  :on-mount
-  (let ((date (use-vui-journal-date)))
-    (vui-batch
-     (vui-set-state :notes (vulpea-journal-ui--query-links-to-today date))
-     (vui-set-state :loading nil)))
+  :render
+  (let* ((date (use-vui-journal-date))
+         (count (length notes)))
 
-  :on-update
-  (let ((date (use-vui-journal-date))
-        (prev-date (plist-get prev-props :date)))
-    (unless (equal date prev-date)
+    ;; Reload when date changes
+    (use-effect (date)
       (vui-batch
        (vui-set-state :loading t)
        (vui-set-state :notes (vulpea-journal-ui--query-links-to-today date))
-       (vui-set-state :loading nil))))
+       (vui-set-state :loading nil)))
 
-  :render
-  (let ((count (length notes)))
     (vui-vstack
      ;; Header
      (vui-hstack
@@ -514,23 +500,17 @@ SET-DATE is callback to change date."
           (loading t)
           (collapsed nil))
 
-  :on-mount
-  (let ((date (use-vui-journal-date)))
-    (vui-batch
-     (vui-set-state :entries (vulpea-journal-ui--query-previous-years date))
-     (vui-set-state :loading nil)))
+  :render
+  (let* ((date (use-vui-journal-date))
+         (count (length entries)))
 
-  :on-update
-  (let ((date (use-vui-journal-date))
-        (prev-date (plist-get prev-props :date)))
-    (unless (equal date prev-date)
+    ;; Reload when date changes
+    (use-effect (date)
       (vui-batch
        (vui-set-state :loading t)
        (vui-set-state :entries (vulpea-journal-ui--query-previous-years date))
-       (vui-set-state :loading nil))))
+       (vui-set-state :loading nil)))
 
-  :render
-  (let ((count (length entries)))
     (vui-vstack
      ;; Header
      (vui-hstack
@@ -566,11 +546,8 @@ SET-DATE is callback to change date."
      ;; Header
      (vui-text (format-time-string "Journal: %Y-%m-%d %A" date)
        :face 'vulpea-journal-ui-header)
-     (vui-newline)
      ;; Navigation
      (vui-component 'vui-journal-nav-bar)
-     (vui-newline)
-     (vui-text (make-string 40 ?─))
      (vui-newline)
      ;; Widgets from registry
      (if (null widgets)
