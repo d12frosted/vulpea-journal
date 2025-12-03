@@ -96,22 +96,22 @@
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-date
-  '((t :inherit org-meta-line))
+  '((t :inherit shadow))
   "Face for regular days in calendar."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-today
-  '((t :inherit org-scheduled-today))
+  '((t :weight bold :inherit error))
   "Face for today in calendar."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-entry
-  '((t :inherit org-agenda-clocking))
+  '((t :inherit diary))
   "Face for days with journal entries."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-selected
-  '((t :inherit org-date-selected))
+  '((t :inherit hl-line))
   "Face for selected day in calendar."
   :group 'vulpea-journal-ui)
 
@@ -248,9 +248,13 @@ SET-SELECTED-DATE is callback to change selected date."
                           (has-entry 'vulpea-journal-ui-calendar-entry)
                           (t 'vulpea-journal-ui-calendar-date)))
                    (day-text (format "%2d" d)))
-              (vui-button (if is-selected
-                              (format "*%s*" day-text)
-                            (format " %s " day-text))
+              (vui-button (format
+                           (cond
+                            (is-selected " %s ")
+                            (is-today " %s ")
+                            (has-entry " %s·")
+                            (t " %s "))
+                           day-text)
                 :face face
                 :on-click (lambda () (funcall set-selected-date date))))))
          ;; All day buttons
@@ -549,11 +553,21 @@ SET-SELECTED-DATE is callback to change selected date."
   :state ((selected-date (or initial-date (current-time))))
 
   :render
-  (vui-journal-selected-date-provider selected-date
-    (vui-journal-set-selected-date-provider
-        (lambda (new-selected-date)
-          (vui-set-state :selected-date new-selected-date))
-      (vui-component 'vui-journal-widgets-view))))
+  (progn
+    ;; Open journal note when selected date changes
+    (use-effect (selected-date)
+      (when-let ((note (vulpea-journal-note selected-date)))
+        (let ((widgets-window (selected-window)))
+          (save-selected-window
+            (other-window 1)
+            (vulpea-visit note)
+            (select-window widgets-window)))))
+
+    (vui-journal-selected-date-provider selected-date
+      (vui-journal-set-selected-date-provider
+          (lambda (new-selected-date)
+            (vui-set-state :selected-date new-selected-date))
+        (vui-component 'vui-journal-widgets-view)))))
 
 ;;; Public API
 
