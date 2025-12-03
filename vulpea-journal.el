@@ -63,7 +63,7 @@
   :group 'vulpea)
 
 (defcustom vulpea-journal-default-template
-  '(:file-name "journal/%Y%m%d.org"
+  '(:file-name "journal/%Y-%m-%d.org"
     :title "%Y-%m-%d %A"
     :tags ("journal"))
   "Default template for journal notes.
@@ -85,7 +85,7 @@ Optional keys (same as `vulpea-create-default-template'):
 
 Note on template syntax:
 
-  `:file-name' and `:title' use strftime format (e.g., %Y%m%d)
+  `:file-name' and `:title' use strftime format (e.g., %Y-%m-%d)
   because they must be expanded for the TARGET DATE, not current
   time. When you open journal for Nov 25, the file should be
   20241125.org regardless of today's date.
@@ -96,7 +96,7 @@ Note on template syntax:
 Example:
 
   (setq vulpea-journal-default-template
-        \\='(:file-name \"journal/%Y%m%d.org\"
+        \\='(:file-name \"journal/%Y-%m-%d.org\"
           :title \"%Y-%m-%d %A\"
           :tags (\"journal\" \"daily\")
           :head \"#+created: %<[%Y-%m-%d]>\"
@@ -106,7 +106,7 @@ Or as a function for dynamic configuration:
 
   (setq vulpea-journal-default-template
         (lambda (date)
-          (list :file-name (format-time-string \"journal/%Y%m%d.org\" date)
+          (list :file-name (format-time-string \"journal/%Y-%m-%d.org\" date)
                 :title (format-time-string \"%Y-%m-%d %A\" date)
                 :tags \\='(\"journal\"))))"
   :type '(choice (plist :key-type symbol :value-type sexp)
@@ -135,7 +135,8 @@ The widgets buffer takes the remaining space."
 (defun vulpea-journal--get-tag ()
   "Get the primary journal tag from template.
 Uses current time for template resolution."
-  (car (plist-get (vulpea-journal--get-template (current-time)) :tags)))
+  (or (car (plist-get (vulpea-journal--get-template (current-time)) :tags))
+      "journal"))
 
 ;;; Variables
 
@@ -185,7 +186,7 @@ Returns time value or nil if not a journal note."
     (let* ((path (vulpea-note-path note))
            (filename (file-name-nondirectory path)))
       ;; Try to parse date from filename
-      (when (string-match "\\([0-9]\\{4\\}\\)\\([0-9]\\{2\\}\\)\\([0-9]\\{2\\}\\)" filename)
+      (when (string-match "\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)" filename)
         (let ((year (string-to-number (match-string 1 filename)))
               (month (string-to-number (match-string 2 filename)))
               (day (string-to-number (match-string 3 filename))))
@@ -234,13 +235,15 @@ Returns time value or nil if not a journal note."
 ;;; Date Queries
 
 (defun vulpea-journal-dates-in-range (start end)
-  "Return list of dates with journal entries between START and END."
-  (let ((notes (vulpea-db-query
-                (lambda (note)
-                  (when-let ((date (vulpea-journal--date-from-note note)))
-                    (and (time-less-p start date)
-                         (time-less-p date end)))))))
-    (delq nil (mapcar #'vulpea-journal--date-from-note notes))))
+  "Return list of dates with journal entries between [START, END)."
+  (->> (list (vulpea-journal--get-tag))
+       (vulpea-db-query-by-tags-every)
+       (--filter (when-let ((date (vulpea-journal--date-from-note it)))
+                   (and (or (time-equal-p start date) (time-less-p start date))
+                        (time-less-p date end)
+                        date)))
+       (-map #'vulpea-journal--date-from-note)
+       (-filter #'identity)))
 
 (defun vulpea-journal-dates-in-month (month year)
   "Return list of dates with journal entries in MONTH of YEAR."
@@ -251,9 +254,10 @@ Returns time value or nil if not a journal note."
 
 (defun vulpea-journal-all-dates ()
   "Return list of all dates with journal entries."
-  (let ((notes (vulpea-db-query #'vulpea-journal-note-p)))
-    (sort (delq nil (mapcar #'vulpea-journal--date-from-note notes))
-          #'time-less-p)))
+  (->> (list (vulpea-journal--get-tag))
+       (vulpea-db-query-by-tags-every)
+       (-map #'vulpea-journal--date-from-note)
+       (-filter #'identity)))
 
 ;;; Two-Window Layout
 

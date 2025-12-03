@@ -32,8 +32,8 @@
 ;;
 ;; Built-in widgets:
 ;; - `calendar' - Interactive month calendar
-;; - `created-today' - Notes created on current date
-;; - `links-to-today' - Notes linking to today's journal
+;; - `created-today' - Notes created on selected date
+;; - `links-to-today' - Notes linking to selected date's journal
 ;; - `previous-years' - Same date in previous years
 ;;
 ;; Creating custom widgets:
@@ -45,7 +45,7 @@
 ;;
 ;;   (defcomponent my-widget-component ()
 ;;     :render
-;;     (let ((date (use-vui-journal-date)))
+;;     (let ((selected-date (use-vui-journal-selected-date)))
 ;;       (vui-vstack
 ;;        (vui-text "My Widget" :face 'vulpea-journal-ui-widget-title)
 ;;        ...)))
@@ -56,6 +56,7 @@
 ;;
 ;;; Code:
 
+(require 'dash)
 (require 'vui)
 (require 'vulpea)
 (require 'vulpea-db)
@@ -74,8 +75,8 @@
 ;;; Contexts
 ;; Share data across the component tree without prop drilling
 
-(defcontext vui-journal-date)
-(defcontext vui-journal-set-date)
+(defcontext vui-journal-selected-date)
+(defcontext vui-journal-set-selected-date)
 (defcontext vui-journal-note-buffer)
 
 ;;; Faces
@@ -94,18 +95,23 @@
   "Face for widget titles."
   :group 'vulpea-journal-ui)
 
+(defface vulpea-journal-ui-calendar-date
+  '((t :inherit org-meta-line))
+  "Face for regular days in calendar."
+  :group 'vulpea-journal-ui)
+
 (defface vulpea-journal-ui-calendar-today
-  '((t :inherit highlight :weight bold))
+  '((t :inherit org-scheduled-today))
   "Face for today in calendar."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-entry
-  '((t :inherit bold))
+  '((t :inherit org-agenda-clocking))
   "Face for days with journal entries."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-selected
-  '((t :inherit region))
+  '((t :inherit org-date-selected))
   "Face for selected day in calendar."
   :group 'vulpea-journal-ui)
 
@@ -145,35 +151,68 @@ Example:
 
 (defun vulpea-journal-ui--get-enabled-widgets ()
   "Return list of enabled widget definitions, sorted by order."
-  (let ((widgets nil))
-    (dolist (name vulpea-journal-ui-widgets)
-      (when-let ((def (vulpea-journal-ui-get-widget name)))
-        (push (cons name def) widgets)))
-    (sort widgets
-          (lambda (a b)
-            (< (or (plist-get (cdr a) :order) 50)
-               (or (plist-get (cdr b) :order) 50))))))
+  (->> vulpea-journal-ui-widgets
+       (-map (lambda (name)
+               (when-let ((def (vulpea-journal-ui-get-widget name)))
+                 (cons name def))))
+       (-non-nil)
+       (--sort (< (or (plist-get (cdr it) :order) 50)
+                  (or (plist-get (cdr other) :order) 50)))))
+
+;;; Reusable Collapsible Widget Component
+
+;; Reusable collapsible widget with header, count, and item list.
+;;
+;; TITLE is the widget title string.
+;; ITEMS is the list of items to display.
+;; EMPTY-MESSAGE is shown when ITEMS is nil.
+;; RENDER-ITEM is a function (lambda (item) vnode) to render each item.
+;; ITEM-KEY is a function (lambda (item) key) for list reconciliation.
+(defcomponent vui-collapsible-widget (title items empty-message render-item item-key)
+  :state ((collapsed nil))
+
+  :render
+  (let ((count (length items))
+        (toggle-collapsed (use-callback (collapsed)
+                            (lambda ()
+                              (vui-set-state :collapsed (not collapsed))))))
+    (vui-vstack
+     ;; Header
+     (vui-hstack
+      :spacing 1
+      (vui-button (if collapsed "▸" "▾")
+        :on-click toggle-collapsed)
+      (vui-text title :face 'vulpea-journal-ui-widget-title)
+      (when (> count 0)
+        (vui-text (format "(%d)" count) :face 'shadow)))
+     ;; Content
+     (unless collapsed
+       (if (null items)
+           (vui-text empty-message :face 'shadow)
+         (vui-vstack
+          :indent 2
+          (vui-list items render-item item-key)))))))
 
 ;;; Navigation Bar Component
 
 (defcomponent vui-journal-nav-bar ()
   :render
-  (let ((set-date (use-vui-journal-set-date)))
+  (let* ((selected-date (use-vui-journal-selected-date))
+         (set-selected-date (use-vui-journal-set-selected-date))
+         ;; Stable callbacks that capture current values
+         (go-prev (lambda ()
+                    (funcall set-selected-date
+                             (time-subtract selected-date (days-to-time 1)))))
+         (go-today (lambda ()
+                     (funcall set-selected-date (current-time))))
+         (go-next (lambda ()
+                    (funcall set-selected-date
+                             (time-add selected-date (days-to-time 1))))))
     (vui-hstack
      :spacing 1
-     (vui-button "< Prev"
-       :on-click (lambda ()
-                   (let ((date (use-vui-journal-date)))
-                     (funcall set-date
-                              (time-subtract date (days-to-time 1))))))
-     (vui-button "Today"
-       :on-click (lambda ()
-                   (funcall set-date (current-time))))
-     (vui-button "Next >"
-       :on-click (lambda ()
-                   (let ((date (use-vui-journal-date)))
-                     (funcall set-date
-                              (time-add date (days-to-time 1)))))))))
+     (vui-button "< Prev" :on-click go-prev)
+     (vui-button "Today" :on-click go-today)
+     (vui-button "Next >" :on-click go-next))))
 
 ;;; Calendar Widget Component
 
@@ -183,105 +222,101 @@ Example:
           (const :tag "Monday" 1))
   :group 'vulpea-journal-ui)
 
-(defun vulpea-journal-ui--calendar-build-rows (month year current-day entry-days today-day today-month today-year set-date)
+(defun vulpea-journal-ui--calendar-build-rows (month year selected-day selected-month selected-year entry-days today-day today-month today-year set-selected-date)
   "Build calendar rows for MONTH/YEAR.
-CURRENT-DAY is the selected day.
+SELECTED-DAY/SELECTED-MONTH/SELECTED-YEAR identify the selected date.
 ENTRY-DAYS is list of days with journal entries.
-TODAY-DAY/TODAY-MONTH/TODAY-YEAR identify today.
-SET-DATE is callback to change date."
+TODAY-DAY/TODAY-MONTH/TODAY-YEAR identify actual today.
+SET-SELECTED-DATE is callback to change selected date."
   (let* ((first-day-of-month (encode-time 0 0 0 1 month year))
          (first-dow (decoded-time-weekday (decode-time first-day-of-month)))
          (first-dow-adjusted (mod (- first-dow vulpea-journal-ui-calendar-week-start) 7))
          (days-in-month (calendar-last-day-of-month month year))
-         (day 1)
-         (rows nil))
-    ;; Build weeks
-    (while (<= day days-in-month)
-      (let ((week nil))
-        ;; Padding for first week
-        (when (and (= day 1) (> first-dow-adjusted 0))
-          (dotimes (_ first-dow-adjusted)
-            (push "" week)))
-        ;; Days in this week
-        (while (and (<= day days-in-month) (< (length week) 7))
-          (let* ((d day)
-                 (is-today (and (= d today-day)
-                                (= month today-month)
-                                (= year today-year)))
-                 (is-selected (= d current-day))
-                 (has-entry (member d entry-days))
-                 (face (cond
-                        (is-today 'vulpea-journal-ui-calendar-today)
-                        (has-entry 'vulpea-journal-ui-calendar-entry)
-                        (t nil)))
-                 (day-text (format "%2d" d)))
-            (push (vui-button (if is-selected
-                                  (format "[%s]" day-text)
-                                (format " %s " day-text))
-                    :face face
-                    :on-click (lambda ()
-                                (funcall set-date
-                                         (encode-time 0 0 0 d month year))))
-                  week))
-          (setq day (1+ day)))
-        ;; Pad end of last week
-        (while (< (length week) 7)
-          (push "" week))
-        (push (nreverse week) rows)))
-    (nreverse rows)))
+         (make-day-button
+          (lambda (d)
+            (let* ((date (encode-time 0 0 0 d month year))
+                   (is-today (and (= d today-day)
+                                  (= month today-month)
+                                  (= year today-year)))
+                   (is-selected (and (= d selected-day)
+                                     (= month selected-month)
+                                     (= year selected-year)))
+                   (has-entry (-contains-p entry-days date))
+                   (face (cond
+                          (is-selected 'vulpea-journal-ui-calendar-selected)
+                          (is-today 'vulpea-journal-ui-calendar-today)
+                          (has-entry 'vulpea-journal-ui-calendar-entry)
+                          (t 'vulpea-journal-ui-calendar-date)))
+                   (day-text (format "%2d" d)))
+              (vui-button (if is-selected
+                              (format "*%s*" day-text)
+                            (format " %s " day-text))
+                :face face
+                :on-click (lambda () (funcall set-selected-date date))))))
+         ;; All day buttons
+         (day-buttons (-map make-day-button (-iota days-in-month 1)))
+         ;; Add leading padding for first week
+         (padded-days (-concat (-repeat first-dow-adjusted "") day-buttons))
+         ;; Add trailing padding to complete last week
+         (trailing-pad (mod (- 7 (mod (length padded-days) 7)) 7))
+         (all-cells (-concat padded-days (-repeat trailing-pad ""))))
+    ;; Split into weeks of 7
+    (-partition 7 all-cells)))
 
 (defcomponent vui-journal-calendar ()
   :render
-  (let* ((date (use-vui-journal-date))
-         (set-date (use-vui-journal-set-date))
-         (decoded (decode-time date))
-         (month (decoded-time-month decoded))
-         (year (decoded-time-year decoded))
-         (current-day (decoded-time-day decoded))
-         ;; Get days with entries
-         (entry-days (use-memo (month year)
-                       (mapcar (lambda (d)
-                                 (decoded-time-day (decode-time d)))
-                               (vulpea-journal-dates-in-month month year))))
-         ;; Today info
+  (let* ((selected-date (use-vui-journal-selected-date))
+         (set-selected-date (use-vui-journal-set-selected-date))
+         ;; Selected date components
+         (selected (decode-time selected-date))
+         (selected-day (decoded-time-day selected))
+         (selected-month (decoded-time-month selected))
+         (selected-year (decoded-time-year selected))
+         ;; Get days with entries (memoised)
+         (entry-days (use-memo (selected-month selected-year)
+                       (vulpea-journal-dates-in-month selected-month selected-year)))
+         ;; Today (actual current date)
          (today (decode-time))
          (today-day (decoded-time-day today))
          (today-month (decoded-time-month today))
          (today-year (decoded-time-year today))
          ;; Day name headers
          (day-names (if (= vulpea-journal-ui-calendar-week-start 1)
-                        '("Mo" "Tu" "We" "Th" "Fr" "Sa" "Su")
-                      '("Su" "Mo" "Tu" "We" "Th" "Fr" "Sa")))
+                        '("Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun")
+                      '("Sun" "Mon" "Tue" "Wed" "Thu" "Fri" "Sat")))
          ;; Column specs
-         (columns (mapcar (lambda (name)
-                            (list :header name :width 4 :align :center))
-                          day-names))
+         (columns (--map (list :header it :width 6) day-names))
          ;; Build rows
          (rows (vulpea-journal-ui--calendar-build-rows
-                month year current-day entry-days
-                today-day today-month today-year set-date))
-         (month-name (calendar-month-name month)))
+                selected-month selected-year
+                selected-day selected-month selected-year
+                entry-days
+                today-day today-month today-year set-selected-date))
+         (month-name (calendar-month-name selected-month))
+         ;; Navigation callbacks
+         (go-prev-month (use-callback (selected-month selected-year set-selected-date)
+                          (lambda ()
+                            (funcall set-selected-date
+                                     (encode-time 0 0 0 1
+                                                  (if (= selected-month 1) 12 (1- selected-month))
+                                                  (if (= selected-month 1) (1- selected-year) selected-year))))))
+         (go-next-month (use-callback (selected-month selected-year set-selected-date)
+                          (lambda ()
+                            (funcall set-selected-date
+                                     (encode-time 0 0 0 1
+                                                  (if (= selected-month 12) 1 (1+ selected-month))
+                                                  (if (= selected-month 12) (1+ selected-year) selected-year)))))))
     (vui-vstack
      ;; Widget title
      (vui-text "Calendar" :face 'vulpea-journal-ui-widget-title)
      ;; Month/year header with navigation
      (vui-hstack
       :spacing 1
-      (vui-button "<"
-        :on-click (lambda ()
-                    (funcall set-date
-                             (encode-time 0 0 0 1
-                                          (if (= month 1) 12 (1- month))
-                                          (if (= month 1) (1- year) year)))))
-      (vui-box (vui-text (format "%s %d" month-name year) :face 'bold)
+      (vui-button "<" :on-click go-prev-month)
+      (vui-box (vui-text (format "%s %d" month-name selected-year) :face 'bold)
         :width 15
         :align :center)
-      (vui-button ">"
-        :on-click (lambda ()
-                    (funcall set-date
-                             (encode-time 0 0 0 1
-                                          (if (= month 12) 1 (1+ month))
-                                          (if (= month 12) (1+ year) year))))))
+      (vui-button ">" :on-click go-next-month))
      (vui-newline)
      ;; Calendar table
      (vui-table
@@ -313,56 +348,37 @@ SET-DATE is callback to change date."
          (created (cdr (assoc "CREATED" (vulpea-note-properties note))))
          (time-str (if (and created (string-match "\\([0-9]+:[0-9]+\\)" created))
                        (match-string 1 created)
-                     "     ")))
+                     "     "))
+         (visit-note (use-callback (note)
+                       (lambda () (vulpea-visit note t)))))
     (vui-hstack
      :spacing 1
      (vui-text time-str :face 'shadow)
      (vui-button title
        :face 'link
-       :on-click (lambda () (vulpea-visit note t)))
+       :on-click visit-note)
      (when tags
-       (vui-text (string-join (mapcar (lambda (tag) (concat "#" tag)) tags) " ")
+       (vui-text (->> tags (--map (concat "#" it)) (string-join " "))
          :face 'shadow)))))
 
 (defcomponent vui-journal-created-today ()
-  :state ((notes nil)
-          (loading t)
-          (collapsed nil))
+  :state ((notes nil))
 
   :render
-  (let* ((date (use-vui-journal-date))
-         (count (length notes)))
+  (let ((selected-date (use-vui-journal-selected-date)))
+    ;; Reload when selected date changes
+    (use-effect (selected-date)
+      (vui-set-state :notes (vulpea-journal-ui--query-created-today selected-date)))
 
-    ;; Reload when date changes
-    (use-effect (date)
-      (vui-batch
-       (vui-set-state :loading t)
-       (vui-set-state :notes (vulpea-journal-ui--query-created-today date))
-       (vui-set-state :loading nil)))
-
-    (vui-vstack
-     ;; Header
-     (vui-hstack
-      :spacing 1
-      (vui-button (if collapsed "▸" "▾")
-        :on-click (lambda () (vui-set-state :collapsed (not collapsed))))
-      (vui-text "Created Today" :face 'vulpea-journal-ui-widget-title)
-      (when (> count 0)
-        (vui-text (format "(%d)" count) :face 'shadow)))
-     ;; Content
-     (unless collapsed
-       (if loading
-           (vui-text "Loading..." :face 'shadow)
-         (if (null notes)
-             (vui-text "  No notes created today" :face 'shadow)
-           (vui-vstack
-            :indent 2
-            (vui-list notes
-                      (lambda (note)
-                        (vui-component 'vui-journal-note-item
-                          :key (vulpea-note-id note)
-                          :note note))
-                      #'vulpea-note-id))))))))
+    (vui-component 'vui-collapsible-widget
+      :title "Created Today"
+      :items notes
+      :empty-message "  No notes created today"
+      :render-item (lambda (note)
+                     (vui-component 'vui-journal-note-item
+                       :key (vulpea-note-id note)
+                       :note note))
+      :item-key #'vulpea-note-id)))
 
 ;;; Links to Today Widget
 
@@ -372,54 +388,39 @@ SET-DATE is callback to change date."
               (today-id (vulpea-note-id today-note)))
     (vulpea-db-query-by-links-some (list today-id))))
 
+(defcomponent vui-journal-link-item (note)
+  :render
+  (let* ((title (vulpea-note-title note))
+         (tags (vulpea-note-tags note))
+         (visit-note (use-callback (note)
+                       (lambda () (vulpea-visit note t)))))
+    (vui-hstack
+     :spacing 1
+     (vui-button title
+       :face 'link
+       :on-click visit-note)
+     (when tags
+       (vui-text (->> tags (--map (concat "#" it)) (string-join " "))
+         :face 'shadow)))))
+
 (defcomponent vui-journal-links-to-today ()
-  :state ((notes nil)
-          (loading t)
-          (collapsed nil))
+  :state ((notes nil))
 
   :render
-  (let* ((date (use-vui-journal-date))
-         (count (length notes)))
+  (let ((selected-date (use-vui-journal-selected-date)))
+    ;; Reload when selected date changes
+    (use-effect (selected-date)
+      (vui-set-state :notes (vulpea-journal-ui--query-links-to-today selected-date)))
 
-    ;; Reload when date changes
-    (use-effect (date)
-      (vui-batch
-       (vui-set-state :loading t)
-       (vui-set-state :notes (vulpea-journal-ui--query-links-to-today date))
-       (vui-set-state :loading nil)))
-
-    (vui-vstack
-     ;; Header
-     (vui-hstack
-      :spacing 1
-      (vui-button (if collapsed "▸" "▾")
-        :on-click (lambda () (vui-set-state :collapsed (not collapsed))))
-      (vui-text "Links to Today" :face 'vulpea-journal-ui-widget-title)
-      (when (> count 0)
-        (vui-text (format "(%d)" count) :face 'shadow)))
-     ;; Content
-     (unless collapsed
-       (if loading
-           (vui-text "Loading..." :face 'shadow)
-         (if (null notes)
-             (vui-text "  No notes link to today" :face 'shadow)
-           (vui-vstack
-            :indent 2
-            (vui-list notes
-                      (lambda (note)
-                        (let ((title (vulpea-note-title note))
-                              (tags (vulpea-note-tags note)))
-                          (vui-hstack
-                           :spacing 1
-                           (vui-button title
-                             :face 'link
-                             :on-click (lambda () (vulpea-visit note t)))
-                           (when tags
-                             (vui-text (string-join
-                                        (mapcar (lambda (tag) (concat "#" tag)) tags)
-                                        " ")
-                               :face 'shadow)))))
-                      #'vulpea-note-id))))))))
+    (vui-component 'vui-collapsible-widget
+      :title "Links to Today"
+      :items notes
+      :empty-message "  No notes link to today"
+      :render-item (lambda (note)
+                     (vui-component 'vui-journal-link-item
+                       :key (vulpea-note-id note)
+                       :note note))
+      :item-key #'vulpea-note-id)))
 
 ;;; Previous Years Widget
 
@@ -438,17 +439,15 @@ SET-DATE is callback to change date."
   (let* ((decoded (decode-time date))
          (month (decoded-time-month decoded))
          (day (decoded-time-day decoded))
-         (year (decoded-time-year decoded))
-         (results nil))
-    (dotimes (i vulpea-journal-ui-previous-years-count)
-      (let* ((past-year (- year (1+ i)))
-             (check-date (encode-time 0 0 0 day month past-year)))
-        (when-let ((note (vulpea-journal-find-note check-date)))
-          (push (list :date check-date
-                      :years-ago (1+ i)
-                      :note note)
-                results))))
-    (nreverse results)))
+         (year (decoded-time-year decoded)))
+    (->> (-iota vulpea-journal-ui-previous-years-count 1)
+         (--map (let* ((past-year (- year it))
+                       (check-date (encode-time 0 0 0 day month past-year)))
+                  (when-let ((note (vulpea-journal-find-note check-date)))
+                    (list :date check-date
+                          :years-ago it
+                          :note note))))
+         (-non-nil))))
 
 (defun vulpea-journal-ui--get-note-preview (note max-chars)
   "Get preview of NOTE content, up to MAX-CHARS."
@@ -477,15 +476,20 @@ SET-DATE is callback to change date."
          (preview (when expanded
                     (vulpea-journal-ui--get-note-preview
                      note
-                     vulpea-journal-ui-previous-years-preview-chars))))
+                     vulpea-journal-ui-previous-years-preview-chars)))
+         (toggle-expanded (use-callback (expanded)
+                            (lambda ()
+                              (vui-set-state :expanded (not expanded)))))
+         (visit-note (use-callback (note)
+                       (lambda () (vulpea-visit note t)))))
     (vui-vstack
      (vui-hstack
       :spacing 1
       (vui-button (if expanded "▾" "▸")
-        :on-click (lambda () (vui-set-state :expanded (not expanded))))
+        :on-click toggle-expanded)
       (vui-button date-str
         :face 'link
-        :on-click (lambda () (vulpea-visit note t)))
+        :on-click visit-note)
       (vui-text (format "(%d year%s ago)"
                         years-ago
                         (if (= years-ago 1) "" "s"))
@@ -496,55 +500,34 @@ SET-DATE is callback to change date."
         (vui-text (concat preview "...") :face 'font-lock-comment-face))))))
 
 (defcomponent vui-journal-previous-years ()
-  :state ((entries nil)
-          (loading t)
-          (collapsed nil))
+  :state ((entries nil))
 
   :render
-  (let* ((date (use-vui-journal-date))
-         (count (length entries)))
+  (let ((selected-date (use-vui-journal-selected-date)))
+    ;; Reload when selected date changes
+    (use-effect (selected-date)
+      (vui-set-state :entries (vulpea-journal-ui--query-previous-years selected-date)))
 
-    ;; Reload when date changes
-    (use-effect (date)
-      (vui-batch
-       (vui-set-state :loading t)
-       (vui-set-state :entries (vulpea-journal-ui--query-previous-years date))
-       (vui-set-state :loading nil)))
-
-    (vui-vstack
-     ;; Header
-     (vui-hstack
-      :spacing 1
-      (vui-button (if collapsed "▸" "▾")
-        :on-click (lambda () (vui-set-state :collapsed (not collapsed))))
-      (vui-text "This Day in Previous Years" :face 'vulpea-journal-ui-widget-title)
-      (when (> count 0)
-        (vui-text (format "(%d)" count) :face 'shadow)))
-     ;; Content
-     (unless collapsed
-       (if loading
-           (vui-text "Loading..." :face 'shadow)
-         (if (null entries)
-             (vui-text "  No entries from previous years" :face 'shadow)
-           (vui-vstack
-            :indent 2
-            (vui-list entries
-                      (lambda (entry)
-                        (vui-component 'vui-journal-previous-year-entry
-                          :key (format-time-string "%Y%m%d" (plist-get entry :date))
-                          :entry entry))
-                      (lambda (entry)
-                        (format-time-string "%Y%m%d" (plist-get entry :date)))))))))))
+    (vui-component 'vui-collapsible-widget
+      :title "This Day in Previous Years"
+      :items entries
+      :empty-message "  No entries from previous years"
+      :render-item (lambda (entry)
+                     (vui-component 'vui-journal-previous-year-entry
+                       :key (format-time-string "%Y%m%d" (plist-get entry :date))
+                       :entry entry))
+      :item-key (lambda (entry)
+                  (format-time-string "%Y%m%d" (plist-get entry :date))))))
 
 ;;; Main Journal View Component
 
 (defcomponent vui-journal-widgets-view ()
   :render
-  (let ((date (use-vui-journal-date))
+  (let ((selected-date (use-vui-journal-selected-date))
         (widgets (vulpea-journal-ui--get-enabled-widgets)))
     (vui-vstack
      ;; Header
-     (vui-text (format-time-string "Journal: %Y-%m-%d %A" date)
+     (vui-text (format-time-string "Journal: %Y-%m-%d %A" selected-date)
        :face 'vulpea-journal-ui-header)
      ;; Navigation
      (vui-component 'vui-journal-nav-bar)
@@ -553,30 +536,23 @@ SET-DATE is callback to change date."
      (if (null widgets)
          (vui-text "No widgets configured. See `vulpea-journal-ui-widgets'."
            :face 'shadow)
-       (apply #'vui-fragment
-              (mapcan (lambda (widget-entry)
-                        (let* ((name (car widget-entry))
-                               (def (cdr widget-entry))
-                               (component (plist-get def :component)))
-                          (list (vui-component component :key name)
-                                (vui-newline))))
-                      widgets))))))
+       (apply
+        #'vui-vstack
+        :spacing 1
+        (-map (-lambda ((name . def))
+                (vui-component (plist-get def :component) :key name))
+              widgets))))))
 
 ;;; Root Component with Context Providers
 
 (defcomponent vui-journal-root (initial-date)
-  :state ((date nil))
-
-  :on-mount
-  (unless date
-    (vui-set-state :date (or initial-date (current-time))))
+  :state ((selected-date (or initial-date (current-time))))
 
   :render
-  (vui-journal-date-provider
-      (or date (current-time))
-    (vui-journal-set-date-provider
-        (lambda (new-date)
-          (vui-set-state :date new-date))
+  (vui-journal-selected-date-provider selected-date
+    (vui-journal-set-selected-date-provider
+        (lambda (new-selected-date)
+          (vui-set-state :selected-date new-selected-date))
       (vui-component 'vui-journal-widgets-view))))
 
 ;;; Public API
