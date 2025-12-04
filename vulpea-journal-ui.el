@@ -598,7 +598,10 @@ SET-SELECTED-DATE is callback to change selected date."
 ;;;###autoload
 (defun vulpea-journal-ui-open (&optional date)
   "Open journal widgets view for DATE using vui.
-DATE defaults to today."
+DATE defaults to today.
+
+Note: Prefer using `vulpea-journal' which sets up the full
+two-window layout with the journal note and widgets sidebar."
   (interactive)
   (let ((buffer-name (or vulpea-journal-widgets-buffer-name "*vulpea-journal*")))
     (vui-mount (vui-component 'vui-journal-root
