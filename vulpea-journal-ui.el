@@ -204,13 +204,21 @@ Opens the note in the main window, not the sidebar."
 (defun vulpea-journal-ui--query-created-today (date)
   "Return notes created on DATE."
   (let ((date-str (format-time-string "%Y-%m-%d" date)))
-    (vulpea-db-query
-     (lambda (note)
-       (and (= (vulpea-note-level note) 0)
-            (when-let ((created (cdr (assoc "CREATED" (vulpea-note-properties note)))))
-              (string-prefix-p date-str created))
-            (or (not vulpea-journal-ui-created-today-exclude-journal)
-                (not (vulpea-journal-note-p note))))))))
+    (vulpea-journal-ui--debug "=== Created Today Query ===")
+    (vulpea-journal-ui--debug "Looking for date: %s" date-str)
+    (let ((results (vulpea-db-query
+                    (lambda (note)
+                      (and (= (vulpea-note-level note) 0)
+                           (when-let ((created (cdr (assoc "CREATED" (vulpea-note-properties note)))))
+                             (vulpea-journal-ui--debug "Note %s has CREATED=%s match=%s"
+                                                       (vulpea-note-title note)
+                                                       created
+                                                       (string-prefix-p date-str created))
+                             (string-prefix-p date-str created))
+                           (or (not vulpea-journal-ui-created-today-exclude-journal)
+                               (not (vulpea-journal-note-p note))))))))
+      (vulpea-journal-ui--debug "Found %d notes" (length results))
+      results)))
 
 
 ;;; Navigation Widget
