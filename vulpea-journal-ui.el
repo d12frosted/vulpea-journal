@@ -203,29 +203,16 @@ Opens the note in the main window, not the sidebar."
 
 (defun vulpea-journal-ui--query-created-today (date)
   "Return notes created on DATE."
-  (let ((date-str (format-time-string "%Y-%m-%d" date))
-        (match-count 0))
-    (vulpea-journal-ui--debug "=== Created Today Query ===")
-    (vulpea-journal-ui--debug "Looking for date: %s" date-str)
-    (let ((results
-           (vulpea-db-query
-            (lambda (note)
-              (let* ((level-ok (= (vulpea-note-level note) 0))
-                     (created (cdr (assoc "CREATED" (vulpea-note-properties note))))
-                     (date-match (and created (string-match-p (regexp-quote date-str) created)))
-                     (is-journal (vulpea-journal-note-p note))
-                     (journal-ok (or (not vulpea-journal-ui-created-today-exclude-journal)
-                                     (not is-journal))))
-                (when (and level-ok date-match (< match-count 10))
-                  (setq match-count (1+ match-count))
-                  (vulpea-journal-ui--debug "Match: %s created=%s is-journal=%s journal-ok=%s"
-                                            (vulpea-note-title note)
-                                            created
-                                            is-journal
-                                            journal-ok))
-                (and level-ok date-match journal-ok))))))
-      (vulpea-journal-ui--debug "Found %d notes" (length results))
-      results)))
+  (let ((date-str (format-time-string "%Y-%m-%d" date)))
+    (vulpea-db-query
+     (lambda (note)
+       (and (= (vulpea-note-level note) 0)
+            (when-let ((created (alist-get 'CREATED (vulpea-note-properties note))))
+              ;; Match date in various formats:
+              ;; "2025-12-08", "[2025-12-08]", "[2025-12-08 08:54]"
+              (string-match-p (regexp-quote date-str) created))
+            (or (not vulpea-journal-ui-created-today-exclude-journal)
+                (not (vulpea-journal-note-p note))))))))
 
 
 ;;; Navigation Widget
@@ -416,7 +403,7 @@ ON-SELECT is callback to handle date selection."
                         (lambda (n)
                           (let* ((title (vulpea-note-title n))
                                  (tags (vulpea-note-tags n))
-                                 (created (cdr (assoc "CREATED" (vulpea-note-properties n))))
+                                 (created (alist-get 'CREATED (vulpea-note-properties n)))
                                  (time-str (if (and created (string-match "\\([0-9]+:[0-9]+\\)" created))
                                                (match-string 1 created)
                                              "     "))
