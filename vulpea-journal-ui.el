@@ -355,56 +355,48 @@ ON-SELECT is callback to handle date selection."
            (vui-set-state :view-month nil)
            (vui-set-state :view-year nil)))
 
-        (vui-vstack
-         ;; Widget title
-         (vui-text "Calendar" :face 'vulpea-journal-ui-widget-title)
-         ;; Month/year header with navigation
-         (vui-hstack
-          :spacing 1
-          (vui-button "<" :on-click go-prev-month)
-          (vui-box (vui-text (format "%s %d" month-name display-year) :face 'bold)
-            :width 15
-            :align :center)
-          (vui-button ">" :on-click go-next-month))
-         (vui-newline)
-         ;; Calendar table
-         (vui-table
-          :columns columns
-          :rows rows))))))
+        (vui-component 'vulpea-ui-widget
+          :title "Calendar"
+          :children
+          (lambda ()
+            (vui-vstack
+             ;; Month/year header with navigation
+             (vui-hstack
+              :spacing 1
+              (vui-button "<" :on-click go-prev-month)
+              (vui-box (vui-text (format "%s %d" month-name display-year) :face 'bold)
+                :width 15
+                :align :center)
+              (vui-button ">" :on-click go-next-month))
+             (vui-newline)
+             ;; Calendar table
+             (vui-table
+              :columns columns
+              :rows rows))))))))
 
 
 ;;; Created Today Widget
 
 (defcomponent vulpea-journal-widget-created-today ()
   "Widget showing notes created on the journal entry's date."
-  :state ((notes nil)
-          (collapsed nil))
+  :state ((notes nil))
 
   :render
   (let ((note (use-vulpea-ui-note)))
     (when (vulpea-journal-note-p note)
       (let* ((date (vulpea-journal-note-date note))
-             (toggle-collapsed (lambda () (vui-set-state :collapsed (not collapsed))))
              (count (length notes)))
         ;; Reload when date changes
         (use-effect (date)
           (vui-set-state :notes (vulpea-journal-ui--query-created-today date)))
 
-        (vui-vstack
-         ;; Header
-         (vui-hstack
-          :spacing 1
-          (vui-button (if collapsed "▸" "▾")
-            :on-click toggle-collapsed)
-          (vui-text "Created Today" :face 'vulpea-journal-ui-widget-title)
-          (when (> count 0)
-            (vui-text (format "(%d)" count) :face 'shadow)))
-         ;; Content
-         (unless collapsed
-           (if (null notes)
-               (vui-text "  No notes created today" :face 'shadow)
-             (vui-vstack
-              :indent 2
+        (vui-component 'vulpea-ui-widget
+          :title "Created Today"
+          :count count
+          :children
+          (lambda ()
+            (if (null notes)
+                (vui-text "No notes created today" :face 'shadow)
               (vui-list notes
                         (lambda (n)
                           (let* ((title (vulpea-note-title n))
@@ -423,7 +415,7 @@ ON-SELECT is callback to handle date selection."
                              (when tags
                                (vui-text (->> tags (--map (concat "#" it)) (string-join " "))
                                  :face 'shadow)))))
-                        #'vulpea-note-id)))))))))
+                        #'vulpea-note-id))))))))
 
 
 ;;; Previous Years Widget
@@ -462,14 +454,12 @@ ON-SELECT is callback to handle date selection."
 
 (defcomponent vulpea-journal-widget-previous-years ()
   "Widget showing same date from previous years."
-  :state ((entries nil)
-          (collapsed nil))
+  :state ((entries nil))
 
   :render
   (let ((note (use-vulpea-ui-note)))
     (when (vulpea-journal-note-p note)
       (let* ((date (vulpea-journal-note-date note))
-             (toggle-collapsed (lambda () (vui-set-state :collapsed (not collapsed))))
              (count (length entries)))
         ;; Reload when date changes
         (use-effect (date)
@@ -478,28 +468,20 @@ ON-SELECT is callback to handle date selection."
                           date
                           vulpea-journal-ui-previous-years-count)))
 
-        (vui-vstack
-         ;; Header
-         (vui-hstack
-          :spacing 1
-          (vui-button (if collapsed "▸" "▾")
-            :on-click toggle-collapsed)
-          (vui-text "This Day in Previous Years" :face 'vulpea-journal-ui-widget-title)
-          (when (> count 0)
-            (vui-text (format "(%d)" count) :face 'shadow)))
-         ;; Content
-         (unless collapsed
-           (if (null entries)
-               (vui-text "  No entries from previous years" :face 'shadow)
-             (vui-vstack
-              :indent 2
+        (vui-component 'vulpea-ui-widget
+          :title "Previous Years"
+          :count count
+          :children
+          (lambda ()
+            (if (null entries)
+                (vui-text "No entries from previous years" :face 'shadow)
               (vui-list entries
                         (lambda (entry)
                           (vui-component 'vulpea-journal-widget-previous-year-entry
                             :key (format-time-string "%Y%m%d" (plist-get entry :date))
                             :entry entry))
                         (lambda (entry)
-                          (format-time-string "%Y%m%d" (plist-get entry :date))))))))))))
+                          (format-time-string "%Y%m%d" (plist-get entry :date)))))))))))
 
 
 (provide 'vulpea-journal-ui)
