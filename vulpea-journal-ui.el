@@ -109,27 +109,32 @@
 
 (defface vulpea-journal-ui-widget-title
   '((t :inherit vulpea-ui-widget-header-face))
-  "Face for widget titles."
+  "Face for journal widget titles."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-date
   '((t :inherit shadow))
-  "Face for regular days in calendar."
+  "Face for regular days in the calendar widget.
+These are days without journal entries that are not today or selected."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-today
   '((t :weight bold :inherit error))
-  "Face for today in calendar."
+  "Face for today's date in the calendar widget.
+Helps identify the current day at a glance. By default bold and
+red (inherits from `error' face)."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-entry
   '((t :inherit diary))
-  "Face for days with journal entries."
+  "Face for days with journal entries in the calendar widget.
+These days are also marked with a dot (·) indicator."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-selected
   '((t :inherit hl-line))
-  "Face for selected day in calendar."
+  "Face for the currently selected day in the calendar widget.
+This is the date of the journal entry you are currently viewing."
   :group 'vulpea-journal-ui)
 
 
