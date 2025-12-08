@@ -201,18 +201,38 @@ Opens the note in the main window, not the sidebar."
 
 ;;; Query Functions
 
+(defun vulpea-journal-ui--extract-time (created)
+  "Extract time string (HH:MM) from CREATED property value.
+Returns nil if no time found."
+  (when (and created (string-match "\\([0-9]\\{2\\}:[0-9]\\{2\\}\\)" created))
+    (match-string 1 created)))
+
 (defun vulpea-journal-ui--query-created-today (date)
-  "Return notes created on DATE."
+  "Return notes created on DATE, sorted by time.
+Notes without time appear first, then sorted by time ascending."
   (let ((date-str (format-time-string "%Y-%m-%d" date)))
-    (vulpea-db-query
-     (lambda (note)
-       (and (= (vulpea-note-level note) 0)
-            (when-let ((created (alist-get 'CREATED (vulpea-note-properties note))))
-              ;; Match date in various formats:
-              ;; "2025-12-08", "[2025-12-08]", "[2025-12-08 08:54]"
-              (string-match-p (regexp-quote date-str) created))
-            (or (not vulpea-journal-ui-created-today-exclude-journal)
-                (not (vulpea-journal-note-p note))))))))
+    (->> (vulpea-db-query
+          (lambda (note)
+            (and (= (vulpea-note-level note) 0)
+                 (when-let ((created (alist-get 'CREATED (vulpea-note-properties note))))
+                   ;; Match date in various formats:
+                   ;; "2025-12-08", "[2025-12-08]", "[2025-12-08 08:54]"
+                   (string-match-p (regexp-quote date-str) created))
+                 (or (not vulpea-journal-ui-created-today-exclude-journal)
+                     (not (vulpea-journal-note-p note))))))
+         (--sort (let ((time-a (vulpea-journal-ui--extract-time
+                                (alist-get 'CREATED (vulpea-note-properties it))))
+                       (time-b (vulpea-journal-ui--extract-time
+                                (alist-get 'CREATED (vulpea-note-properties other)))))
+                   (cond
+                    ;; Both have no time - keep original order
+                    ((and (null time-a) (null time-b)) nil)
+                    ;; Only a has no time - a comes first
+                    ((null time-a) t)
+                    ;; Only b has no time - b comes first
+                    ((null time-b) nil)
+                    ;; Both have time - sort ascending
+                    (t (string< time-a time-b))))))))
 
 
 ;;; Navigation Widget
