@@ -348,11 +348,20 @@ When called interactively, prompt for date."
          (date-string (org-read-date nil nil nil prompt)))
     (org-time-string-to-time date-string)))
 
+(defun vulpea-journal--buffer-note ()
+  "Get the journal note for the current buffer.
+Returns nil if current buffer is not visiting a journal note."
+  (when-let ((file (buffer-file-name)))
+    (car (vulpea-db-query
+          (lambda (n)
+            (and (string= (vulpea-note-path n) file)
+                 (= (vulpea-note-level n) 0)))))))
+
 ;;;###autoload
 (defun vulpea-journal-next ()
   "Navigate to the next journal entry."
   (interactive)
-  (let ((note (vulpea-ui-current-note)))
+  (let ((note (vulpea-journal--buffer-note)))
     (if (not (vulpea-journal-note-p note))
         (user-error "Not viewing a journal note")
       (if-let* ((current-date (vulpea-journal-note-date note))
@@ -364,7 +373,7 @@ When called interactively, prompt for date."
 (defun vulpea-journal-previous ()
   "Navigate to the previous journal entry."
   (interactive)
-  (let ((note (vulpea-ui-current-note)))
+  (let ((note (vulpea-journal--buffer-note)))
     (if (not (vulpea-journal-note-p note))
         (user-error "Not viewing a journal note")
       (if-let* ((current-date (vulpea-journal-note-date note))
