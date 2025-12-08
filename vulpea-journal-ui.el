@@ -439,7 +439,7 @@ ON-SELECT is callback to handle date selection."
     (vui-vstack
      (vui-hstack
       :spacing 1
-      (vui-button (if expanded "▾" "▸")
+      (vui-button (if expanded "▼" "▶")
         :on-click toggle-expanded)
       (vui-button date-str
         :face 'link
