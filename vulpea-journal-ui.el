@@ -405,7 +405,10 @@ ON-SELECT is callback to handle date selection."
                                  (time-str (if (and created (string-match "\\([0-9]+:[0-9]+\\)" created))
                                                (match-string 1 created)
                                              "     "))
-                                 (visit-note (lambda () (vulpea-visit n t))))
+                                 (visit-note (lambda ()
+                                               (let ((main-win (vulpea-ui--get-main-window)))
+                                                 (when main-win (select-window main-win))
+                                                 (vulpea-visit n)))))
                             (vui-hstack
                              :spacing 1
                              (vui-text time-str :face 'shadow)
@@ -435,7 +438,10 @@ ON-SELECT is callback to handle date selection."
                      vulpea-journal-ui-previous-years-preview-chars)))
          (toggle-expanded (lambda ()
                             (vui-set-state :expanded (not expanded))))
-         (visit-note (lambda () (vulpea-visit note t))))
+         (visit-note (lambda ()
+                            (let ((main-win (vulpea-ui--get-main-window)))
+                              (when main-win (select-window main-win))
+                              (vulpea-visit note)))))
     (vui-vstack
      (vui-hstack
       :spacing 1
