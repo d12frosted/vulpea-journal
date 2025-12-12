@@ -107,14 +107,14 @@
 
 (ert-deftest vulpea-journal-date-from-note ()
   "Test date extraction from journal note."
-  (let ((vulpea-journal-default-template '(:file-name "journal/%Y%m%d.org"
+  (let ((vulpea-journal-default-template '(:file-name "journal/%Y-%m-%d.org"
                                            :title "%Y-%m-%d %A"
                                            :tags ("journal")))
         (note (make-vulpea-note
                :id "test"
-               :path "/notes/journal/20241125.org"
+               :path "/notes/journal/2024-11-25.org"
                :tags '("journal"))))
-    (let ((date (vulpea-journal--date-from-note note)))
+    (let ((date (vulpea-journal-note-date note)))
       (should date)
       (let ((decoded (decode-time date)))
         (should (= (decoded-time-year decoded) 2024))
@@ -123,14 +123,14 @@
 
 (ert-deftest vulpea-journal-date-from-note-not-journal ()
   "Test date extraction from non-journal note."
-  (let ((vulpea-journal-default-template '(:file-name "journal/%Y%m%d.org"
+  (let ((vulpea-journal-default-template '(:file-name "journal/%Y-%m-%d.org"
                                            :title "%Y-%m-%d %A"
                                            :tags ("journal")))
         (note (make-vulpea-note
                :id "test"
                :path "/notes/project.org"
                :tags '("project"))))
-    (should-not (vulpea-journal--date-from-note note))))
+    (should-not (vulpea-journal-note-date note))))
 
 ;;; Full Integration Test
 
