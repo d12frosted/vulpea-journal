@@ -114,6 +114,19 @@ Only logs when `vulpea-journal-debug' is non-nil."
   :type 'boolean
   :group 'vulpea-journal-ui)
 
+(defcustom vulpea-journal-ui-widget-orders
+  '((nav . 50)
+    (calendar . 150)
+    (created-today . 350)
+    (previous-years . 360))
+  "Order of journal widgets in the sidebar.
+Lower numbers appear first. Built-in vulpea-ui widgets use:
+  stats: 100, outline: 200, backlinks: 300, links: 400
+
+Adjust these values to interleave journal widgets with others."
+  :type '(alist :key-type symbol :value-type integer)
+  :group 'vulpea-journal-ui)
+
 
 ;;; Faces
 
@@ -240,25 +253,24 @@ Notes without time appear first, then sorted by time ascending."
 (defcomponent vulpea-journal-widget-nav ()
   "Navigation widget for journal entries (prev/today/next)."
   :render
-  (let ((note (use-vulpea-ui-note)))
-    (when (vulpea-journal-note-p note)
-      (let* ((date (vulpea-journal-note-date note))
-             (go-prev (lambda ()
-                        (vulpea-journal-ui--visit-date (time-subtract date (days-to-time 1)))))
-             (go-today (lambda ()
-                         (vulpea-journal-ui--visit-date (current-time))))
-             (go-next (lambda ()
-                        (vulpea-journal-ui--visit-date (time-add date (days-to-time 1))))))
-        (vui-vstack
-         ;; Header with date
-         (vui-text (format-time-string "Journal: %Y-%m-%d %A" date)
-           :face 'vulpea-journal-ui-widget-title)
-         ;; Navigation buttons
-         (vui-hstack
-          :spacing 1
-          (vui-button "< Prev" :on-click go-prev)
-          (vui-button "Today" :on-click go-today)
-          (vui-button "Next >" :on-click go-next)))))))
+  (let* ((note (use-vulpea-ui-note))
+         (date (vulpea-journal-note-date note))
+         (go-prev (lambda ()
+                    (vulpea-journal-ui--visit-date (time-subtract date (days-to-time 1)))))
+         (go-today (lambda ()
+                     (vulpea-journal-ui--visit-date (current-time))))
+         (go-next (lambda ()
+                    (vulpea-journal-ui--visit-date (time-add date (days-to-time 1))))))
+    (vui-vstack
+     ;; Header with date
+     (vui-text (format-time-string "Journal: %Y-%m-%d %A" date)
+       :face 'vulpea-journal-ui-widget-title)
+     ;; Navigation buttons
+     (vui-hstack
+      :spacing 1
+      (vui-button "< Prev" :on-click go-prev)
+      (vui-button "Today" :on-click go-today)
+      (vui-button "Next >" :on-click go-next)))))
 
 
 ;;; Calendar Widget
@@ -320,9 +332,8 @@ ON-SELECT is callback to handle date selection."
           (view-year nil))
 
   :render
-  (let ((note (use-vulpea-ui-note)))
-    (when (vulpea-journal-note-p note)
-      (let* ((date (vulpea-journal-note-date note))
+  (let* ((note (use-vulpea-ui-note))
+         (date (vulpea-journal-note-date note))
              (decoded (decode-time date))
              (selected-day (decoded-time-day decoded))
              (selected-month (decoded-time-month decoded))
@@ -391,10 +402,10 @@ ON-SELECT is callback to handle date selection."
                 :align :center)
               (vui-button ">" :on-click go-next-month))
              (vui-newline)
-             ;; Calendar table
-             (vui-table
-              :columns columns
-              :rows rows))))))))
+           ;; Calendar table
+           (vui-table
+            :columns columns
+            :rows rows)))))))
 
 
 ;;; Created Today Widget
@@ -404,43 +415,42 @@ ON-SELECT is callback to handle date selection."
   :state ((notes nil))
 
   :render
-  (let ((note (use-vulpea-ui-note)))
-    (when (vulpea-journal-note-p note)
-      (let* ((date (vulpea-journal-note-date note))
-             (count (length notes)))
-        ;; Reload when date changes
-        (use-effect (date)
-          (vui-set-state :notes (vulpea-journal-ui--query-created-today date)))
+  (let* ((note (use-vulpea-ui-note))
+         (date (vulpea-journal-note-date note))
+         (count (length notes)))
+    ;; Reload when date changes
+    (use-effect (date)
+      (vui-set-state :notes (vulpea-journal-ui--query-created-today date)))
 
-        (vui-component 'vulpea-ui-widget
-          :title "Created Today"
-          :count count
-          :children
-          (lambda ()
-            (if (null notes)
-                (vui-text "No notes created today" :face 'shadow)
-              (vui-list notes
-                        (lambda (n)
-                          (let* ((title (vulpea-note-title n))
-                                 (tags (vulpea-note-tags n))
-                                 (created (alist-get 'CREATED (vulpea-note-properties n)))
-                                 (time-str (if (and created (string-match "\\([0-9]+:[0-9]+\\)" created))
-                                               (match-string 1 created)
-                                             "     "))
-                                 (visit-note (lambda ()
-                                               (let ((main-win (vulpea-ui--get-main-window)))
-                                                 (when main-win (select-window main-win))
-                                                 (vulpea-visit n)))))
-                            (vui-hstack
-                             :spacing 1
-                             (vui-text time-str :face 'shadow)
-                             (vui-button title
-                               :face 'link
-                               :on-click visit-note)
-                             (when tags
-                               (vui-text (string-join (--map (concat "#" it) tags) " ")
-                                 :face 'shadow)))))
-                        #'vulpea-note-id))))))))
+    (vui-component 'vulpea-ui-widget
+      :title "Created Today"
+      :count count
+      :children
+      (lambda ()
+        (if (null notes)
+            (vui-text "No notes created today" :face 'shadow)
+          (vui-list notes
+                    (lambda (n)
+                      (let* ((title (vulpea-note-title n))
+                             (tags (vulpea-note-tags n))
+                             (created (alist-get 'CREATED (vulpea-note-properties n)))
+                             (time-str (if (and created (string-match "\\([0-9]+:[0-9]+\\)" created))
+                                           (match-string 1 created)
+                                         "     "))
+                             (visit-note (lambda ()
+                                           (let ((main-win (vulpea-ui--get-main-window)))
+                                             (when main-win (select-window main-win))
+                                             (vulpea-visit n)))))
+                        (vui-hstack
+                         :spacing 1
+                         (vui-text time-str :face 'shadow)
+                         (vui-button title
+                           :face 'link
+                           :on-click visit-note)
+                         (when tags
+                           (vui-text (string-join (--map (concat "#" it) tags) " ")
+                             :face 'shadow)))))
+                    #'vulpea-note-id))))))
 
 
 ;;; Previous Years Widget
@@ -485,32 +495,57 @@ ON-SELECT is callback to handle date selection."
   :state ((entries nil))
 
   :render
-  (let ((note (use-vulpea-ui-note)))
-    (when (vulpea-journal-note-p note)
-      (let* ((date (vulpea-journal-note-date note))
-             (count (length entries)))
-        ;; Reload when date changes
-        (use-effect (date)
-          (vui-set-state :entries
-                         (vulpea-journal-notes-for-date-across-years
-                          date
-                          vulpea-journal-ui-previous-years-count)))
+  (let* ((note (use-vulpea-ui-note))
+         (date (vulpea-journal-note-date note))
+         (count (length entries)))
+    ;; Reload when date changes
+    (use-effect (date)
+      (vui-set-state :entries
+                     (vulpea-journal-notes-for-date-across-years
+                      date
+                      vulpea-journal-ui-previous-years-count)))
 
-        (vui-component 'vulpea-ui-widget
-          :title "Previous Years"
-          :count count
-          :children
-          (lambda ()
-            (if (null entries)
-                (vui-text "No entries from previous years" :face 'shadow)
-              (vui-list entries
-                        (lambda (entry)
-                          (vui-component 'vulpea-journal-widget-previous-year-entry
-                            :key (format-time-string "%Y%m%d" (plist-get entry :date))
-                            :entry entry))
-                        (lambda (entry)
-                          (format-time-string "%Y%m%d" (plist-get entry :date)))))))))))
+    (vui-component 'vulpea-ui-widget
+      :title "Previous Years"
+      :count count
+      :children
+      (lambda ()
+        (if (null entries)
+            (vui-text "No entries from previous years" :face 'shadow)
+          (vui-list entries
+                    (lambda (entry)
+                      (vui-component 'vulpea-journal-widget-previous-year-entry
+                        :key (format-time-string "%Y%m%d" (plist-get entry :date))
+                        :entry entry))
+                    (lambda (entry)
+                      (format-time-string "%Y%m%d" (plist-get entry :date)))))))))
 
+
+;;; Widget Registration
+
+(defun vulpea-journal-ui--get-order (widget)
+  "Get order for WIDGET from `vulpea-journal-ui-widget-orders'."
+  (or (alist-get widget vulpea-journal-ui-widget-orders) 100))
+
+(vulpea-ui-register-widget 'journal-nav
+  :component 'vulpea-journal-widget-nav
+  :predicate #'vulpea-journal-note-p
+  :order (vulpea-journal-ui--get-order 'nav))
+
+(vulpea-ui-register-widget 'journal-calendar
+  :component 'vulpea-journal-widget-calendar
+  :predicate #'vulpea-journal-note-p
+  :order (vulpea-journal-ui--get-order 'calendar))
+
+(vulpea-ui-register-widget 'journal-created-today
+  :component 'vulpea-journal-widget-created-today
+  :predicate #'vulpea-journal-note-p
+  :order (vulpea-journal-ui--get-order 'created-today))
+
+(vulpea-ui-register-widget 'journal-previous-years
+  :component 'vulpea-journal-widget-previous-years
+  :predicate #'vulpea-journal-note-p
+  :order (vulpea-journal-ui--get-order 'previous-years))
 
 (provide 'vulpea-journal-ui)
 ;;; vulpea-journal-ui.el ends here
