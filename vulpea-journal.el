@@ -223,10 +223,7 @@ Returns time value or nil if date cannot be extracted."
   "Find existing journal note for DATE, or nil."
   (let ((file (vulpea-journal--file-for-date date)))
     (when (file-exists-p file)
-      (car (vulpea-db-query
-            (lambda (note)
-              (and (string= (vulpea-note-path note) file)
-                   (= (vulpea-note-level note) 0))))))))
+      (car (vulpea-db-query-by-file-path file 0)))))
 
 (defun vulpea-journal-note (date)
   "Get journal note for DATE, creating if needed."
@@ -352,10 +349,7 @@ When called interactively, prompt for date."
   "Get the journal note for the current buffer.
 Returns nil if current buffer is not visiting a journal note."
   (when-let ((file (buffer-file-name)))
-    (car (vulpea-db-query
-          (lambda (n)
-            (and (string= (vulpea-note-path n) file)
-                 (= (vulpea-note-level n) 0)))))))
+    (car (vulpea-db-query-by-file-path file 0))))
 
 ;;;###autoload
 (defun vulpea-journal-next ()

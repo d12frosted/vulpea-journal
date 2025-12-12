@@ -260,9 +260,9 @@ Notes without time appear first, then sorted by time ascending."
      ;; Navigation buttons
      (vui-hstack
       :spacing 1
-      (vui-button "< Prev" :on-click go-prev)
-      (vui-button "Today" :on-click go-today)
-      (vui-button "Next >" :on-click go-next)))))
+      (vui-button "< Prev" :on-click go-prev :help-echo nil)
+      (vui-button "Today" :on-click go-today :help-echo nil)
+      (vui-button "Next >" :on-click go-next :help-echo nil)))))
 
 
 ;;; Calendar Widget
@@ -308,6 +308,7 @@ ON-SELECT is callback to handle date selection."
                            day-text)
                 :no-decoration t
                 :face face
+                :help-echo nil
                 :on-click (lambda () (funcall on-select date))))))
          ;; All day buttons
          (day-buttons (-map make-day-button (-iota days-in-month 1)))
@@ -390,11 +391,11 @@ ON-SELECT is callback to handle date selection."
          ;; Month/year header with navigation
          (vui-hstack
           :spacing 1
-          (vui-button "<" :on-click go-prev-month)
+          (vui-button "<" :on-click go-prev-month :help-echo nil)
           (vui-box (vui-text (format "%s %d" month-name display-year) :face 'bold)
             :width 15
             :align :center)
-          (vui-button ">" :on-click go-next-month))
+          (vui-button ">" :on-click go-next-month :help-echo nil))
          (vui-newline)
          ;; Calendar table
          (vui-table
@@ -441,6 +442,7 @@ ON-SELECT is callback to handle date selection."
                 (vui-text time-str :face 'shadow)
                 (vui-button title
                   :face 'link
+                  :help-echo nil
                   :on-click visit-note)
                 (when tags
                   (vui-text (string-join (--map (concat "#" it) tags) " ")
@@ -472,9 +474,11 @@ ON-SELECT is callback to handle date selection."
      (vui-hstack
       :spacing 1
       (vui-button (if expanded "▼" "▶")
+        :help-echo nil
         :on-click toggle-expanded)
       (vui-button date-str
         :face 'link
+        :help-echo nil
         :on-click visit-note)
       (vui-text (format "(%d year%s ago)"
                         years-ago
