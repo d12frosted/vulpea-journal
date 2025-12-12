@@ -1,0 +1,32 @@
+#+title: Changelog
+
+* Unreleased
+
+* v1.0.0-rc.1
+
+Initial release candidate.
+
+** Features
+
+- Daily journaling with one file per day, automatically created with customizable templates
+- Seamless integration with [[https://github.com/d12frosted/vulpea-ui][vulpea-ui]] sidebar
+- Reactive widgets built on [[https://github.com/d12frosted/vulpea-ui][vui.el]]:
+  - *Navigation* - prev/today/next buttons for quick navigation between journal entries
+  - *Calendar* - monthly view with entry indicators, click to jump to any date
+  - *Previous Years* - "on this day" view showing entries from past years with preview
+  - *Created Today* - notes created on the current journal date
+- Customizable templates for file paths and titles
+- Automatic widget registration with vulpea-ui
+
+** Performance
+
+- Optimized database queries using indexed lookups (=vulpea-db-query-by-file-path=, =vulpea-db-query-by-created-date=)
+- Memoized calendar entry queries
+- Disabled button tooltips for faster rendering
+
+** Requirements
+
+- Emacs 29.1+
+- vulpea 2.0+
+- vulpea-ui 0.1+
+- dash 2.20+
