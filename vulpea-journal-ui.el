@@ -37,16 +37,8 @@
 ;; - `vulpea-journal-widget-created-today' - Notes created on date
 ;; - `vulpea-journal-widget-previous-years' - Same date in past years
 ;;
-;; To use, add widgets to `vulpea-ui-sidebar-widgets':
-;;
-;;   (setq vulpea-ui-sidebar-widgets
-;;         '(vulpea-journal-widget-nav
-;;           vulpea-ui-widget-stats
-;;           vulpea-journal-widget-calendar
-;;           vulpea-ui-widget-outline
-;;           vulpea-ui-widget-backlinks
-;;           vulpea-journal-widget-created-today
-;;           vulpea-journal-widget-previous-years))
+;; Widgets are automatically registered when this module is loaded.
+;; They only appear when viewing journal notes (via predicate filtering).
 ;;
 ;;; Code:
 

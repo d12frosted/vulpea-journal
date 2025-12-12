@@ -271,26 +271,6 @@ Click the date to visit that journal. Click `▸`/`▾` to expand/collapse the p
 (add-hook 'emacs-startup-hook #'vulpea-journal)
 ```
 
-### Different widgets for journal vs regular notes
-
-Since journal widgets auto-hide for non-journal notes, you can have a unified widget list:
-
-```elisp
-(setq vulpea-ui-sidebar-widgets
-      '(;; Journal-only (hidden for regular notes)
-        vulpea-journal-widget-nav
-        vulpea-journal-widget-calendar
-
-        ;; Always visible
-        vulpea-ui-widget-stats
-        vulpea-ui-widget-outline
-        vulpea-ui-widget-backlinks
-
-        ;; Journal-only
-        vulpea-journal-widget-created-today
-        vulpea-journal-widget-previous-years))
-```
-
 ### Weekly review workflow
 
 Use `vulpea-journal-dates-in-range` to query entries:
@@ -321,7 +301,7 @@ If you want a different tag than `"journal"`:
 
 ### Widgets don't appear in sidebar
 
-1. Make sure you've added them to `vulpea-ui-sidebar-widgets`
+1. Ensure `vulpea-journal-ui` is loaded (widgets auto-register on load)
 2. Check that you're viewing a journal note (has the journal tag)
 3. Try `M-x vulpea-ui-sidebar-refresh`
 
