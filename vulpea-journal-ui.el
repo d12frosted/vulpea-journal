@@ -306,6 +306,7 @@ ON-SELECT is callback to handle date selection."
                             (has-entry " %s·")
                             (t " %s "))
                            day-text)
+                :no-decoration t
                 :face face
                 :on-click (lambda () (funcall on-select date))))))
          ;; All day buttons
@@ -354,7 +355,8 @@ ON-SELECT is callback to handle date selection."
                         '("Mo" "Tu" "We" "Th" "Fr" "Sa" "Su")
                       '("Su" "Mo" "Tu" "We" "Th" "Fr" "Sa")))
          ;; Column specs
-         (columns (--map (list :header it :width 5) day-names))
+         ;; prepend " " to imitate :center alignment in columns
+         (columns (--map (list :header (concat " " it)) day-names))
          ;; Date selection handler
          (on-select (lambda (new-date)
                       (vulpea-journal-ui--visit-date new-date)))
