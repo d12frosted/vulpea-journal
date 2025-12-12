@@ -210,10 +210,7 @@ Days with journal entries are highlighted in the calendar.
 
 Shows the current journal date and navigation buttons:
 
-#+begin_example
-Journal: 2025-12-08 Sunday
-[< Prev] [Today] [Next >]
-#+end_example
+[[file:images/vulpea-journal-ui-navigation.png]]
 
 Clicking *Prev/Next* navigates by one day (creating the entry if needed).
 Clicking *Today* jumps to today's journal.
@@ -222,14 +219,7 @@ Clicking *Today* jumps to today's journal.
 
 Interactive month calendar:
 
-#+begin_example
-Calendar
-[<] December 2025 [>]
-Mo Tu We Th Fr Sa Su
- 1  2  3  4  5  6  7
- 8· 9 10 11 12 13 14
-...
-#+end_example
+[[file:images/vulpea-journal-ui-calendar.png]]
 
 - *Bold* = today
 - *Highlighted* = selected date
@@ -242,12 +232,7 @@ Use =<= and =>= to navigate months without changing the selected date.
 
 Lists all notes created on the journal's date (from the CREATED property):
 
-#+begin_example
-▾ Created Today (3)
-  09:15 Meeting notes #work
-  14:30 Project ideas #projects
-  16:45 Book recommendation #reading
-#+end_example
+[[file:images/vulpea-journal-ui-created-today.png]]
 
 Click a note to visit it. Times come from the CREATED property timestamp.
 
@@ -255,12 +240,7 @@ Click a note to visit it. Times come from the CREATED property timestamp.
 
 Shows journal entries from the same date in previous years:
 
-#+begin_example
-▾ This Day in Previous Years (2)
-  ▾ 2024-12-08 (1 year ago)
-    Had a great conversation with...
-  ▸ 2023-12-08 (2 years ago)
-#+end_example
+[[file:images/vulpea-journal-ui-previous-years.png]]
 
 Click the date to visit that journal. Click =▸=/=▾= to expand/collapse the preview.
 
