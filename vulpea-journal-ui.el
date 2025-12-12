@@ -216,15 +216,9 @@ Returns nil if no time found."
   "Return notes created on DATE, sorted by time.
 Notes without time appear first, then sorted by time ascending."
   (let ((date-str (format-time-string "%Y-%m-%d" date)))
-    (->> (vulpea-db-query
-          (lambda (note)
-            (and (= (vulpea-note-level note) 0)
-                 (when-let ((created (alist-get 'CREATED (vulpea-note-properties note))))
-                   ;; Match date in various formats:
-                   ;; "2025-12-08", "[2025-12-08]", "[2025-12-08 08:54]"
-                   (string-match-p (regexp-quote date-str) created))
-                 (or (not vulpea-journal-ui-created-today-exclude-journal)
-                     (not (vulpea-journal-note-p note))))))
+    (->> (vulpea-db-query-by-created-date date-str 0)
+         (--filter (or (not vulpea-journal-ui-created-today-exclude-journal)
+                       (not (vulpea-journal-note-p it))))
          (--sort (let ((time-a (vulpea-journal-ui--extract-time
                                 (alist-get 'CREATED (vulpea-note-properties it))))
                        (time-b (vulpea-journal-ui--extract-time
