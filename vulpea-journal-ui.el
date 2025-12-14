@@ -161,15 +161,6 @@ Opens the note in the main window, not the sidebar."
   (require 'vulpea-journal)
   (vulpea-ui-visit-note (vulpea-journal-note date)))
 
-(defun vulpea-journal-ui--strip-drawers (text)
-  "Remove org drawers from TEXT."
-  (with-temp-buffer
-    (insert text)
-    (goto-char (point-min))
-    (while (re-search-forward "^[ \t]*:[A-Z_]+:[ \t]*\n\\(?:.*\n\\)*?[ \t]*:END:[ \t]*\n?" nil t)
-      (replace-match ""))
-    (buffer-string)))
-
 (defun vulpea-journal-ui--indent-text (text indent)
   "Indent each line of TEXT with INDENT spaces."
   (string-join
@@ -178,26 +169,21 @@ Opens the note in the main window, not the sidebar."
    "\n"))
 
 (defun vulpea-journal-ui--get-note-preview (note max-chars)
-  "Get preview of NOTE content, up to MAX-CHARS."
+  "Get preview of NOTE content, up to MAX-CHARS.
+Uses `vulpea-ui-clean-org-markup' to strip drawers and metadata."
   (when-let ((path (vulpea-note-path note)))
     (when (file-exists-p path)
       (with-temp-buffer
         (insert-file-contents path nil 0 (* max-chars 3))
-        (goto-char (point-min))
-        ;; Strip drawers if configured
-        (when vulpea-journal-ui-previous-years-hide-drawers
-          (let ((content (vulpea-journal-ui--strip-drawers (buffer-string))))
-            (erase-buffer)
-            (insert content)
-            (goto-char (point-min))))
-        ;; Skip front matter (#+keywords)
-        (while (and (not (eobp))
-                    (looking-at "^\\(#\\+\\|$\\)"))
-          (forward-line 1))
-        (let ((start (point))
-              (end (min (+ (point) max-chars) (point-max))))
-          (when (< start end)
-            (string-trim (buffer-substring-no-properties start end))))))))
+        (let* ((content (buffer-string))
+               ;; Clean org markup (drawers, metadata, links)
+               (cleaned (if vulpea-journal-ui-previous-years-hide-drawers
+                            (vulpea-ui-clean-org-markup content)
+                          content)))
+          (when cleaned
+            (let ((trimmed (string-trim cleaned)))
+              (when (> (length trimmed) 0)
+                (substring trimmed 0 (min max-chars (length trimmed)))))))))))
 
 
 ;;; Query Functions
