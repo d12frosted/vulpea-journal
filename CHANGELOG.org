@@ -2,6 +2,10 @@
 
 * Unreleased
 
+** Fixed
+
+- Calendar marking now shows journal entries in all visible months (previous, current, next), not just the current month.
+
 * v1.0.0-rc.2 (2025-12-14)
 
 ** Added

@@ -384,18 +384,36 @@ Returns nil if current buffer is not visiting a journal note."
   :group 'vulpea-journal)
 
 (defun vulpea-journal-calendar-mark-entries ()
-  "Mark days in calendar that have journal entries."
+  "Mark days in calendar that have journal entries.
+Marks entries for all visible months (previous, current, next)."
   (when (and (boundp 'displayed-month) (boundp 'displayed-year))
-    (let ((entries (vulpea-journal-dates-in-month displayed-month displayed-year)))
-      (dolist (date entries)
-        (let* ((decoded (decode-time date))
-               (day (decoded-time-day decoded))
-               (month (decoded-time-month decoded))
-               (year (decoded-time-year decoded)))
-          (when (calendar-date-is-visible-p (list month day year))
-            (calendar-mark-visible-date
-             (list month day year)
-             'vulpea-journal-calendar-entry-face)))))))
+    ;; Calendar shows 3 months: prev, current, next
+    ;; Query all 3 to mark entries in adjacent months
+    (let* ((prev-month (1- displayed-month))
+           (prev-year displayed-year)
+           (next-month (1+ displayed-month))
+           (next-year displayed-year))
+      ;; Adjust for year boundaries
+      (when (< prev-month 1)
+        (setq prev-month 12
+              prev-year (1- displayed-year)))
+      (when (> next-month 12)
+        (setq next-month 1
+              next-year (1+ displayed-year)))
+      ;; Collect entries from all 3 months
+      (let ((entries (append
+                      (vulpea-journal-dates-in-month prev-month prev-year)
+                      (vulpea-journal-dates-in-month displayed-month displayed-year)
+                      (vulpea-journal-dates-in-month next-month next-year))))
+        (dolist (date entries)
+          (let* ((decoded (decode-time date))
+                 (day (decoded-time-day decoded))
+                 (month (decoded-time-month decoded))
+                 (year (decoded-time-year decoded)))
+            (when (calendar-date-is-visible-p (list month day year))
+              (calendar-mark-visible-date
+               (list month day year)
+               'vulpea-journal-calendar-entry-face))))))))
 
 (defun vulpea-journal-calendar-open ()
   "Open journal for date at point in calendar."
