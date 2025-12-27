@@ -218,7 +218,7 @@ Notes without time appear first, then sorted by time ascending."
 
 ;;; Navigation Widget
 
-(defcomponent vulpea-journal-widget-nav ()
+(vui-defcomponent vulpea-journal-widget-nav ()
   "Navigation widget for journal entries (prev/today/next)."
   :render
   (let* ((note (use-vulpea-ui-note))
@@ -296,7 +296,7 @@ ON-SELECT is callback to handle date selection."
     ;; Split into weeks of 7
     (-partition 7 all-cells)))
 
-(defcomponent vulpea-journal-widget-calendar ()
+(vui-defcomponent vulpea-journal-widget-calendar ()
   "Calendar widget showing month view with journal entry indicators."
   :state ((view-month nil)
           (view-year nil))
@@ -312,7 +312,7 @@ ON-SELECT is callback to handle date selection."
          (display-month (or view-month selected-month))
          (display-year (or view-year selected-year))
          ;; Get days with entries (memoized)
-         (entry-days (use-memo (display-month display-year)
+         (entry-days (vui-use-memo (display-month display-year)
                        (let ((days (vulpea-journal-dates-in-month display-month display-year)))
                          (vulpea-journal-ui--debug "=== Calendar Debug ===")
                          (vulpea-journal-ui--debug "Querying month=%d year=%d" display-month display-year)
@@ -354,7 +354,7 @@ ON-SELECT is callback to handle date selection."
                            (vui-set-state :view-month (if (= display-month 12) 1 (1+ display-month)))
                            (vui-set-state :view-year (if (= display-month 12) (1+ display-year) display-year))))))
     ;; Reset view-month/year when selected date changes to different month
-    (use-effect (selected-month selected-year)
+    (vui-use-effect (selected-month selected-year)
       (vui-batch
        (vui-set-state :view-month nil)
        (vui-set-state :view-year nil)))
@@ -381,7 +381,7 @@ ON-SELECT is callback to handle date selection."
 
 ;;; Created Today Widget
 
-(defcomponent vulpea-journal-widget-created-today ()
+(vui-defcomponent vulpea-journal-widget-created-today ()
   "Widget showing notes created on the journal entry's date."
   :state ((notes nil))
 
@@ -390,7 +390,7 @@ ON-SELECT is callback to handle date selection."
          (date (vulpea-journal-note-date note))
          (count (length notes)))
     ;; Reload when date changes
-    (use-effect (date)
+    (vui-use-effect (date)
       (vui-set-state :notes (vulpea-journal-ui--query-created-today date)))
 
     (vui-component 'vulpea-ui-widget
@@ -427,7 +427,7 @@ ON-SELECT is callback to handle date selection."
 
 ;;; Previous Years Widget
 
-(defcomponent vulpea-journal-widget-previous-year-entry (entry)
+(vui-defcomponent vulpea-journal-widget-previous-year-entry (entry)
   "Single entry from a previous year."
   :state ((expanded vulpea-journal-ui-previous-years-expanded))
 
@@ -464,7 +464,7 @@ ON-SELECT is callback to handle date selection."
        (vui-text (vulpea-journal-ui--indent-text (concat preview "...") 4)
          :face 'font-lock-comment-face)))))
 
-(defcomponent vulpea-journal-widget-previous-years ()
+(vui-defcomponent vulpea-journal-widget-previous-years ()
   "Widget showing same date from previous years."
   :state ((entries nil))
 
@@ -473,7 +473,7 @@ ON-SELECT is callback to handle date selection."
          (date (vulpea-journal-note-date note))
          (count (length entries)))
     ;; Reload when date changes
-    (use-effect (date)
+    (vui-use-effect (date)
       (vui-set-state :entries
                      (vulpea-journal-notes-for-date-across-years
                       date
