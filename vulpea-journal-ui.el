@@ -400,7 +400,7 @@ ON-SELECT is callback to handle date selection."
       :children
       (lambda ()
         (if (null notes)
-            (vui-text "No notes created today" :face 'shadow)
+            (vui-muted "No notes created today")
           (vui-list
            notes
            (lambda (n)
@@ -416,14 +416,13 @@ ON-SELECT is callback to handle date selection."
                                     (vulpea-visit n)))))
                (vui-hstack
                 :spacing 1
-                (vui-text time-str :face 'shadow)
+                (vui-muted time-str)
                 (vui-button title
                   :face 'link
                   :help-echo nil
                   :on-click visit-note)
                 (when tags
-                  (vui-text (string-join (--map (concat "#" it) tags) " ")
-                    :face 'shadow)))))
+                  (vui-muted (string-join (--map (concat "#" it) tags) " "))))))
            #'vulpea-note-id))))))
 
 ;;; Previous Years Widget
@@ -457,10 +456,9 @@ ON-SELECT is callback to handle date selection."
         :face 'link
         :help-echo nil
         :on-click visit-note)
-      (vui-text (format "(%d year%s ago)"
-                        years-ago
-                        (if (= years-ago 1) "" "s"))
-        :face 'shadow))
+      (vui-muted (format "(%d year%s ago)"
+                         years-ago
+                         (if (= years-ago 1) "" "s"))))
      (when (and expanded preview)
        (vui-text (vulpea-journal-ui--indent-text (concat preview "...") 4)
          :face 'font-lock-comment-face)))))
@@ -486,7 +484,7 @@ ON-SELECT is callback to handle date selection."
       :children
       (lambda ()
         (if (null entries)
-            (vui-text "No entries from previous years" :face 'shadow)
+            (vui-muted "No entries from previous years")
           (vui-list entries
                     (lambda (entry)
                       (vui-component 'vulpea-journal-widget-previous-year-entry
