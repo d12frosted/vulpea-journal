@@ -540,7 +540,7 @@ Works whether called from sidebar or main window."
 
 (defun vulpea-journal-ui-date (date)
   "Navigate to journal for DATE from sidebar."
-  (interactive (list (vulpea-journal--read-date)))
+  (interactive (list (vulpea-journal--read-date "Journal date: ")))
   (vulpea-journal-ui--visit-date date))
 
 ;;; Widget Registration
