@@ -251,8 +251,10 @@ Shows the current journal date and navigation buttons:
 
 [[file:images/vulpea-journal-ui-navigation.png]]
 
-Clicking *Prev/Next* navigates by one day (creating the entry if needed).
+Clicking *Prev/Next* navigates by one calendar day (creating the entry if needed).
 Clicking *Today* jumps to today's journal.
+
+Note: The sidebar keybindings =[= and =]= behave differently — they jump to the next/previous *existing* journal entry, skipping days without entries.
 
 ** vulpea-journal-widget-calendar
 
@@ -265,7 +267,7 @@ Interactive month calendar:
 - *Dot (·)* = has journal entry
 - Click any date to open its journal
 
-Use =<= and =>= to navigate months without changing the selected date.
+Click the =<= and =>= buttons to navigate months without changing the selected date.
 
 ** vulpea-journal-widget-created-today
 
