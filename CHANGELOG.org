@@ -6,6 +6,12 @@
 
 - Use =vui-muted= semantic component for de-emphasized text.
 
+** Fixed
+
+- Pass missing prompt argument to =vulpea-journal--read-date= in sidebar date picker.
+- Use string keys for property alist lookups in Created Today and Previous Years widgets.
+- Update =vulpea-ui= version requirement in =Package-Requires= to 1.0.0.
+
 * v1.0.0 (2026-01-12)
 
 Initial stable release.
