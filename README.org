@@ -6,6 +6,8 @@
   <a href="https://melpa.org/#/vulpea-journal"><img alt="MELPA" src="https://melpa.org/packages/vulpea-journal-badge.svg"/></a>
   <a href="https://github.com/d12frosted/vulpea-journal/actions/workflows/main.yml"><img alt="CI" src="https://github.com/d12frosted/vulpea-journal/actions/workflows/main.yml/badge.svg"/></a>
   <img alt="version" src="https://img.shields.io/github/v/tag/d12frosted/vulpea-journal?label=version"/>
+
+  <a href="https://github.com/sponsors/d12frosted"><img alt="Sponsor" src="https://img.shields.io/badge/Sponsor-d12frosted-pink?logo=githubsponsors&logoColor=white"/></a>
 </p>
 #+end_html
 
@@ -484,3 +486,7 @@ Contributions welcome! Please open issues and PRs on GitHub.
 * License
 
 GPLv3. See [[file:LICENSE][LICENSE]] for details.
+
+* Support
+
+If you enjoy this project, you can support its development via [[https://github.com/sponsors/d12frosted][GitHub Sponsors]] or [[https://www.patreon.com/d12frosted][Patreon]].
