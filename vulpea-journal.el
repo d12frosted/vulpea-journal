@@ -123,6 +123,60 @@ Or as a function for dynamic configuration:
   :group 'vulpea-journal)
 
 
+;;; Template Builders
+
+(cl-defun vulpea-journal-template-daily (&key
+                                         (file-name "journal/%Y-%m-%d.org")
+                                         (title "%Y-%m-%d %A")
+                                         (tags '("journal"))
+                                         head body properties meta context)
+  "Create a daily journal template (one file per day).
+
+Returns a plist suitable for `vulpea-journal-default-template'.
+
+All parameters are optional with sensible defaults:
+- FILE-NAME: strftime format for file path (default: journal/%Y-%m-%d.org)
+- TITLE: strftime format for note title (default: %Y-%m-%d %A)
+- TAGS: list of tags (default: (\"journal\"))
+- HEAD, BODY, PROPERTIES, META, CONTEXT: passed to `vulpea-create'"
+  (append
+   (list :file-name file-name :title title :tags tags)
+   (when head (list :head head))
+   (when body (list :body body))
+   (when properties (list :properties properties))
+   (when meta (list :meta meta))
+   (when context (list :context context))))
+
+(cl-defun vulpea-journal-template-monthly (&key
+                                           (file-name "journal/%Y-%m.org")
+                                           (title "%Y-%m")
+                                           (tags '("journal"))
+                                           (entry-level 1)
+                                           (entry-title "%d %A")
+                                           head body properties meta context)
+  "Create a monthly journal template (one file per month).
+
+Daily entries are created as headings inside the monthly file.
+
+Returns a plist suitable for `vulpea-journal-default-template'.
+
+All parameters are optional with sensible defaults:
+- FILE-NAME: strftime format for monthly file (default: journal/%Y-%m.org)
+- TITLE: strftime format for file-level title (default: %Y-%m)
+- TAGS: list of tags (default: (\"journal\"))
+- ENTRY-LEVEL: heading level for daily entries (default: 1)
+- ENTRY-TITLE: strftime format for entry heading (default: %d %A)
+- HEAD, BODY, PROPERTIES, META, CONTEXT: passed to `vulpea-create'"
+  (append
+   (list :file-name file-name :title title :tags tags
+         :entry-level entry-level :entry-title entry-title)
+   (when head (list :head head))
+   (when body (list :body body))
+   (when properties (list :properties properties))
+   (when meta (list :meta meta))
+   (when context (list :context context))))
+
+
 ;;; Template Resolution
 
 (defun vulpea-journal--get-template (date)
@@ -136,6 +190,21 @@ Or as a function for dynamic configuration:
 Uses current time for template resolution."
   (or (car (plist-get (vulpea-journal--get-template (current-time)) :tags))
       "journal"))
+
+(defun vulpea-journal--heading-entry-p (&optional date)
+  "Return non-nil if current template uses heading-level entries.
+Optional DATE is used for template resolution (defaults to current time)."
+  (let ((tpl (vulpea-journal--get-template (or date (current-time)))))
+    (plist-get tpl :entry-level)))
+
+(defun vulpea-journal--entry-level (date)
+  "Return :entry-level from template for DATE, or nil for file-per-day."
+  (plist-get (vulpea-journal--get-template date) :entry-level))
+
+(defun vulpea-journal--entry-title-for-date (date)
+  "Return heading title for DATE using :entry-title format."
+  (let ((fmt (plist-get (vulpea-journal--get-template date) :entry-title)))
+    (format-time-string fmt date)))
 
 
 ;;; Journal Directory
@@ -172,26 +241,35 @@ Uses current time for template resolution."
   "Extract date from journal NOTE.
 Returns time value or nil if not a journal note or date cannot be extracted.
 
-Extracts date from the file path (e.g., journal/2025-12-08.org).
-Falls back to CREATED property if file path doesn't contain a date."
+For file-level notes (daily): extracts date from the file path.
+For heading-level notes (monthly): extracts date from CREATED property.
+Falls back to CREATED property in all cases."
   (when (vulpea-journal-note-p note)
     (let ((path (vulpea-note-path note)))
-      (vulpea-journal--debug "note-date: title=%s path=%s"
+      (vulpea-journal--debug "note-date: title=%s path=%s level=%s"
                              (vulpea-note-title note)
-                             path)
-      ;; Extract date from file path first (most reliable)
-      (or (vulpea-journal--date-from-file path)
-          ;; Fall back to CREATED property
-          (let* ((props (vulpea-note-properties note))
-                 (created (cdr (assoc "CREATED" props))))
-            (vulpea-journal--debug "note-date: fallback to props=%S created=%S"
-                                   props created)
-            (when (and created
-                       (string-match "\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)" created))
-              (let ((year (string-to-number (match-string 1 created)))
-                    (month (string-to-number (match-string 2 created)))
-                    (day (string-to-number (match-string 3 created))))
-                (encode-time 0 0 0 day month year))))))))
+                             path
+                             (vulpea-note-level note))
+      (if (> (or (vulpea-note-level note) 0) 0)
+          ;; Heading-level note: use CREATED property
+          (vulpea-journal--date-from-created note)
+        ;; File-level note: extract from file path, fallback to CREATED
+        (or (vulpea-journal--date-from-file path)
+            (vulpea-journal--date-from-created note))))))
+
+(defun vulpea-journal--date-from-created (note)
+  "Extract date from CREATED property of NOTE."
+  (let* ((props (vulpea-note-properties note))
+         (created (or (alist-get 'CREATED props)
+                      (cdr (assoc "CREATED" props)))))
+    (vulpea-journal--debug "date-from-created: props=%S created=%S"
+                           props created)
+    (when (and created
+               (string-match "\\([0-9]\\{4\\}\\)-\\([0-9]\\{2\\}\\)-\\([0-9]\\{2\\}\\)" created))
+      (let ((year (string-to-number (match-string 1 created)))
+            (month (string-to-number (match-string 2 created)))
+            (day (string-to-number (match-string 3 created))))
+        (encode-time 0 0 0 day month year)))))
 
 
 ;;; File Path Resolution
@@ -226,19 +304,45 @@ Returns time value or nil if date cannot be extracted."
 
 (defun vulpea-journal-find-note (date)
   "Find existing journal note for DATE, or nil."
-  (let ((file (vulpea-journal--file-for-date date)))
-    (when (file-exists-p file)
-      (or (car (vulpea-db-query-by-file-path file 0))
-          ;; Fallback: try with resolved truename for symlink cases
-          ;; (e.g., macOS /var -> /private/var)
-          (let ((truename (file-truename file)))
-            (unless (string= truename file)
-              (car (vulpea-db-query-by-file-path truename 0))))
-          ;; Fallback: try with abbreviated path for databases that
-          ;; store paths with ~ instead of expanded home directory
-          (let ((abbreviated (abbreviate-file-name file)))
-            (unless (string= abbreviated file)
-              (car (vulpea-db-query-by-file-path abbreviated 0))))))))
+  (let* ((entry-level (vulpea-journal--entry-level date))
+         (file (vulpea-journal--file-for-date date)))
+    (if entry-level
+        ;; Heading-level entry: find by file path + level + CREATED date
+        (vulpea-journal--find-heading-note file entry-level date)
+      ;; File-level entry: find by file path at level 0
+      (when (file-exists-p file)
+        (or (car (vulpea-db-query-by-file-path file 0))
+            ;; Fallback: try with resolved truename for symlink cases
+            ;; (e.g., macOS /var -> /private/var)
+            (let ((truename (file-truename file)))
+              (unless (string= truename file)
+                (car (vulpea-db-query-by-file-path truename 0))))
+            ;; Fallback: try with abbreviated path for databases that
+            ;; store paths with ~ instead of expanded home directory
+            (let ((abbreviated (abbreviate-file-name file)))
+              (unless (string= abbreviated file)
+                (car (vulpea-db-query-by-file-path abbreviated 0)))))))))
+
+(defun vulpea-journal--find-heading-note (file level date)
+  "Find heading-level journal note in FILE at LEVEL matching DATE."
+  (when (file-exists-p file)
+    (let* ((target-date-str (format-time-string "%Y-%m-%d" date))
+           (notes (vulpea-journal--query-file-notes file level)))
+      (--first
+       (let ((created (or (alist-get 'CREATED (vulpea-note-properties it))
+                         (cdr (assoc "CREATED" (vulpea-note-properties it))))))
+         (and created (string-match-p (regexp-quote target-date-str) created)))
+       notes))))
+
+(defun vulpea-journal--query-file-notes (file level)
+  "Query notes in FILE at LEVEL, trying path variations."
+  (or (vulpea-db-query-by-file-path file level)
+      (let ((truename (file-truename file)))
+        (unless (string= truename file)
+          (vulpea-db-query-by-file-path truename level)))
+      (let ((abbreviated (abbreviate-file-name file)))
+        (unless (string= abbreviated file)
+          (vulpea-db-query-by-file-path abbreviated level)))))
 
 (defun vulpea-journal-note (date)
   "Get journal note for DATE, creating if needed."
@@ -247,11 +351,17 @@ Returns time value or nil if date cannot be extracted."
 
 (defun vulpea-journal--create-note (date)
   "Create a new journal note for DATE.
-Signals an error if a file already exists at the target path but is
-not in the vulpea database (e.g., manually created file without
-proper org-roam/vulpea properties)."
+For daily templates, creates a file-level note.
+For monthly templates, creates a heading inside the monthly container."
   (let* ((tpl (vulpea-journal--get-template date))
-         (file (vulpea-journal--file-for-date date))
+         (entry-level (plist-get tpl :entry-level)))
+    (if entry-level
+        (vulpea-journal--create-heading-note date tpl)
+      (vulpea-journal--create-file-note date tpl))))
+
+(defun vulpea-journal--create-file-note (date tpl)
+  "Create a file-level journal note for DATE using template TPL."
+  (let* ((file (vulpea-journal--file-for-date date))
          (title (vulpea-journal--title-for-date date))
          (id (org-id-new)))
     (when (file-exists-p file)
@@ -270,24 +380,63 @@ an ID property and running `vulpea-db-sync'" file))
      :properties (plist-get tpl :properties)
      :meta (plist-get tpl :meta)
      :context (plist-get tpl :context))
-    ;; Return the created note
     (vulpea-db-get-by-id id)))
+
+(defun vulpea-journal--create-heading-note (date tpl)
+  "Create a heading-level journal note for DATE using template TPL."
+  (let* ((file (vulpea-journal--file-for-date date))
+         (entry-title (vulpea-journal--entry-title-for-date date))
+         (date-str (format-time-string "[%Y-%m-%d]" date))
+         ;; Find or create the container (file-level note)
+         (container (vulpea-journal--ensure-container file date tpl)))
+    ;; Create heading entry under container
+    (vulpea-create
+     entry-title
+     nil
+     :parent container
+     :tags (plist-get tpl :tags)
+     :properties `(("CREATED" . ,date-str))
+     :after 'last)))
+
+(defun vulpea-journal--ensure-container (file date tpl)
+  "Ensure monthly container file exists at FILE for DATE.
+TPL is the journal template. Returns the container vulpea-note."
+  (or
+   ;; Try to find existing container
+   (car (vulpea-journal--query-file-notes file 0))
+   ;; Create new container
+   (let ((title (vulpea-journal--title-for-date date))
+         (id (org-id-new)))
+     (vulpea-journal--ensure-directory file)
+     (vulpea-create
+      title
+      file
+      :id id
+      :head (plist-get tpl :head))
+     (vulpea-db-get-by-id id))))
 
 
 ;;; Date Queries
 
 (defun vulpea-journal-all-dates ()
-  "Return list of all dates with journal entries."
+  "Return list of all dates with journal entries.
+Includes both file-level entries (daily) and heading-level entries (monthly)."
   (let* ((tag (vulpea-journal--get-tag))
-         (notes (vulpea-db-query-by-tags-every (list tag)))
-         (file-level-notes (--filter (= (vulpea-note-level it) 0) notes)))
+         (notes (vulpea-db-query-by-tags-every (list tag))))
     (vulpea-journal--debug "=== all-dates ===")
     (vulpea-journal--debug "Tag: %s" tag)
     (vulpea-journal--debug "Notes with tag: %d" (length notes))
-    (vulpea-journal--debug "File-level notes: %d" (length file-level-notes))
-    (->> file-level-notes
+    (->> notes
+         ;; Include file-level notes with YYYY-MM-DD in filename (daily)
+         ;; and heading-level notes with CREATED property (monthly)
+         ;; Exclude file-level container notes (no date in filename)
+         (--filter (or (and (= (vulpea-note-level it) 0)
+                            (vulpea-journal--date-from-file
+                             (vulpea-note-path it)))
+                       (> (vulpea-note-level it) 0)))
          (-map #'vulpea-journal-note-date)
          (-filter #'identity)
+         (-uniq)
          (-sort #'time-less-p))))
 
 (defun vulpea-journal-dates-in-range (start end)
