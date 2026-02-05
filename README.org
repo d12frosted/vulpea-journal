@@ -11,15 +11,15 @@
 </p>
 #+end_html
 
-A daily journaling interface for [[https://github.com/d12frosted/vulpea][vulpea]] that integrates seamlessly with [[https://github.com/d12frosted/vulpea-ui][vulpea-ui]] sidebar.
+A journaling interface for [[https://github.com/d12frosted/vulpea][vulpea]] that integrates seamlessly with [[https://github.com/d12frosted/vulpea-ui][vulpea-ui]] sidebar.
 
 * What is vulpea-journal?
 
-vulpea-journal brings the power of daily journaling to your vulpea-based note system. Think of it as [[https://github.com/bastibe/org-journal][org-journal]] rebuilt from the ground up for vulpea, with a modern reactive UI.
+vulpea-journal brings the power of journaling to your vulpea-based note system. Think of it as [[https://github.com/bastibe/org-journal][org-journal]] rebuilt from the ground up for vulpea, with a modern reactive UI.
 
 *Key features:*
 
-- *Daily notes* - One file per day, automatically created with customizable templates
+- *Flexible granularity* - One file per day, or one file per month with daily headings
 - *Sidebar widgets* - Calendar, navigation, related notes - all in the vulpea-ui sidebar
 - *Calendar integration* - See which days have entries, jump to any date
 - *Previous years* - "On this day" view showing what you wrote in past years
@@ -95,15 +95,16 @@ Press =C-c j= to open today's journal. The sidebar will show journal-specific wi
 
 ** Journal Notes
 
-Journal notes are regular vulpea notes identified by a tag (default: ="journal"=). Each note has:
+Journal notes are regular vulpea notes identified by a tag (default: ="journal"=). Depending on the template granularity:
 
-- A *file path* based on the date (e.g., =journal/2025-12-08.org=)
-- A *title* based on the date (e.g., =2025-12-08 Sunday=)
-- A *CREATED property* storing the date for querying
+- *Daily* (default): one file per day (e.g., =journal/2025-12-08.org=)
+- *Monthly*: one file per month (e.g., =journal/2025-12.org=) with daily entries as headings (e.g., =* 08 Monday=)
+
+Each note has a *CREATED property* storing the date for querying.
 
 When you call =vulpea-journal=, it:
 1. Finds or creates the note for that date
-2. Opens it in your main window
+2. Opens it in your main window (for monthly, navigates to the heading)
 3. Shows the vulpea-ui sidebar with journal widgets
 
 ** Sidebar Integration
@@ -120,7 +121,54 @@ Journal widgets check if the current note is a journal entry. When you view a no
 
 ** Template
 
-Customize how journal notes are created:
+Customize how journal notes are created. Use the template builder functions for convenience:
+
+*** Daily (one file per day, default)
+
+#+begin_src emacs-lisp
+(setq vulpea-journal-default-template
+      (vulpea-journal-template-daily))
+#+end_src
+
+This is equivalent to the default behavior. You can override any parameter:
+
+#+begin_src emacs-lisp
+(setq vulpea-journal-default-template
+      (vulpea-journal-template-daily
+       :file-name "daily/%Y-%m-%d.org"
+       :title "%A, %B %d, %Y"
+       :body "* Morning\n\n* Evening\n"))
+#+end_src
+
+*** Monthly (one file per month)
+
+#+begin_src emacs-lisp
+(setq vulpea-journal-default-template
+      (vulpea-journal-template-monthly))
+#+end_src
+
+This creates one file per month (e.g., =journal/2025-12.org=) with each day as a heading (e.g., =* 08 Monday=). Override any parameter:
+
+#+begin_src emacs-lisp
+(setq vulpea-journal-default-template
+      (vulpea-journal-template-monthly
+       :file-name "journal/%Y/%m.org"
+       :entry-title "%d %A"))
+#+end_src
+
+Monthly template parameters:
+
+| Parameter       | Default            | Description                      |
+|-----------------+--------------------+----------------------------------|
+| =:file-name=    | =journal/%Y-%m.org= | strftime format for monthly file |
+| =:title=        | =%Y-%m=             | File-level note title            |
+| =:entry-level=  | =1=                 | Heading level for daily entries  |
+| =:entry-title=  | =%d %A=             | strftime format for heading      |
+| =:tags=         | =("journal")=       | Tags (first one identifies journals) |
+
+*** Raw template plist
+
+You can also provide a raw plist directly:
 
 #+begin_src emacs-lisp
 (setq vulpea-journal-default-template
@@ -131,11 +179,11 @@ Customize how journal notes are created:
         :body "* Morning\n\n* Evening\n"))    ; Initial body
 #+end_src
 
-*Important:* The =:file-name= and =:title= use =strftime= format because they're expanded for the /target date/, not the current time. When you open the journal for December 25th, the file will be =journal/2025-12-25.org= regardless of today's date.
+*Important:* The =:file-name=, =:title=, and =:entry-title= use =strftime= format because they're expanded for the /target date/, not the current time. When you open the journal for December 25th, the file will be =journal/2025-12-25.org= regardless of today's date.
 
 Other keys (=:head=, =:body=) use vulpea's =%<format>= syntax and are expanded at creation time.
 
-** Dynamic Templates
+*** Dynamic Templates
 
 For more control, use a function:
 
@@ -314,12 +362,16 @@ Use =vulpea-journal-dates-in-range= to query entries:
 If you want a different tag than ="journal"=:
 
 #+begin_src emacs-lisp
+;; Daily with custom tag
 (setq vulpea-journal-default-template
-      '(:file-name "daily/%Y-%m-%d.org"
-        :title "%Y-%m-%d %A"
-        :tags ("daily-note")  ; First tag is used for identification
-        :head "#+created: %<[%Y-%m-%d]>"))
+      (vulpea-journal-template-daily :tags '("daily-note")))
+
+;; Monthly with custom tag
+(setq vulpea-journal-default-template
+      (vulpea-journal-template-monthly :tags '("daily-note")))
 #+end_src
+
+The first tag in the list is used for identification.
 
 * Troubleshooting
 
@@ -455,6 +507,10 @@ Usage:
 ** Functions
 
 #+begin_src emacs-lisp
+;; Template builders
+(vulpea-journal-template-daily)     ; Daily template (one file per day)
+(vulpea-journal-template-monthly)   ; Monthly template (one file per month)
+
 ;; Note identification
 (vulpea-journal-note-p note)        ; Is NOTE a journal note?
 (vulpea-journal-note-date note)     ; Extract date from journal NOTE
