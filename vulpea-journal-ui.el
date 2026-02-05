@@ -58,6 +58,8 @@
 (declare-function vulpea-journal-note-date "vulpea-journal")
 (declare-function vulpea-journal-dates-in-month "vulpea-journal")
 (declare-function vulpea-journal-notes-for-date-across-years "vulpea-journal")
+(declare-function vulpea-journal-active-date "vulpea-journal")
+(declare-function vulpea-journal--set-active-date "vulpea-journal")
 
 
 ;;; Customization
@@ -156,11 +158,30 @@ This is the date of the journal entry you are currently viewing."
 
 ;;; Helper Functions
 
+(defun vulpea-journal-ui--get-active-date ()
+  "Get the active journal date from the main buffer.
+Returns the date the user is currently viewing, or nil."
+  (when-let ((main-win (vulpea-ui--get-main-window)))
+    (vulpea-journal-active-date (window-buffer main-win))))
+
+(defun vulpea-journal-ui--journal-view-p (note)
+  "Return non-nil if journal widgets should be shown.
+Checks both `vulpea-journal-note-p' on NOTE and whether the
+main buffer has an active journal date (for monthly containers)."
+  (or (vulpea-journal-note-p note)
+      (vulpea-journal-ui--get-active-date)))
+
 (defun vulpea-journal-ui--visit-date (date)
   "Visit journal for DATE from sidebar context.
 Opens the note in the main window, not the sidebar."
   (require 'vulpea-journal)
-  (vulpea-ui-visit-note (vulpea-journal-note date)))
+  (let ((note (vulpea-journal-note date)))
+    (vulpea-ui-visit-note note)
+    ;; Set active date on the main buffer
+    (when-let ((main-win (vulpea-ui--get-main-window)))
+      (vulpea-journal--set-active-date date (window-buffer main-win)))
+    ;; Force sidebar refresh for same-file navigation
+    (vulpea-ui-sidebar-refresh)))
 
 (defun vulpea-journal-ui--indent-text (text indent)
   "Indent each line of TEXT with INDENT spaces."
@@ -203,9 +224,11 @@ Notes without time appear first, then sorted by time ascending."
          (--filter (or (not vulpea-journal-ui-created-today-exclude-journal)
                        (not (vulpea-journal-note-p it))))
          (--sort (let ((time-a (vulpea-journal-ui--extract-time
-                                (cdr (assoc "CREATED" (vulpea-note-properties it)))))
+                                (or (alist-get 'CREATED (vulpea-note-properties it))
+                                    (cdr (assoc "CREATED" (vulpea-note-properties it))))))
                        (time-b (vulpea-journal-ui--extract-time
-                                (cdr (assoc "CREATED" (vulpea-note-properties other))))))
+                                (or (alist-get 'CREATED (vulpea-note-properties other))
+                                    (cdr (assoc "CREATED" (vulpea-note-properties other)))))))
                    (cond
                     ;; Both have no time - keep original order
                     ((and (null time-a) (null time-b)) nil)
@@ -222,8 +245,7 @@ Notes without time appear first, then sorted by time ascending."
 (vui-defcomponent vulpea-journal-widget-nav ()
   "Navigation widget for journal entries (prev/today/next)."
   :render
-  (let* ((note (use-vulpea-ui-note))
-         (date (vulpea-journal-note-date note))
+  (let* ((date (vulpea-journal-ui--get-active-date))
          (go-prev (lambda ()
                     (vulpea-journal-ui--visit-date (time-subtract date (days-to-time 1)))))
          (go-today (lambda ()
@@ -303,8 +325,7 @@ ON-SELECT is callback to handle date selection."
           (view-year nil))
 
   :render
-  (let* ((note (use-vulpea-ui-note))
-         (date (vulpea-journal-note-date note))
+  (let* ((date (vulpea-journal-ui--get-active-date))
          (decoded (decode-time date))
          (selected-day (decoded-time-day decoded))
          (selected-month (decoded-time-month decoded))
@@ -387,8 +408,7 @@ ON-SELECT is callback to handle date selection."
   :state ((notes nil))
 
   :render
-  (let* ((note (use-vulpea-ui-note))
-         (date (vulpea-journal-note-date note))
+  (let* ((date (vulpea-journal-ui--get-active-date))
          (count (length notes)))
     ;; Reload when date changes
     (vui-use-effect (date)
@@ -406,7 +426,8 @@ ON-SELECT is callback to handle date selection."
            (lambda (n)
              (let* ((title (vulpea-note-title n))
                     (tags (vulpea-note-tags n))
-                    (created (cdr (assoc "CREATED" (vulpea-note-properties n))))
+                    (created (or (alist-get 'CREATED (vulpea-note-properties n))
+                                (cdr (assoc "CREATED" (vulpea-note-properties n)))))
                     (time-str (if (and created (string-match "\\([0-9]+:[0-9]+\\)" created))
                                   (match-string 1 created)
                                 "     "))
@@ -468,8 +489,7 @@ ON-SELECT is callback to handle date selection."
   :state ((entries nil))
 
   :render
-  (let* ((note (use-vulpea-ui-note))
-         (date (vulpea-journal-note-date note))
+  (let* ((date (vulpea-journal-ui--get-active-date))
          (count (length entries)))
     ;; Reload when date changes
     (vui-use-effect (date)
@@ -514,22 +534,24 @@ Works whether called from sidebar or main window."
 (defun vulpea-journal-ui-previous ()
   "Navigate to the previous journal entry from sidebar."
   (interactive)
-  (let ((note (vulpea-journal-ui--sidebar-note)))
-    (if (not (vulpea-journal-note-p note))
+  (let ((current-date (or (vulpea-journal-ui--get-active-date)
+                          (vulpea-journal-note-date
+                           (vulpea-journal-ui--sidebar-note)))))
+    (if (null current-date)
         (user-error "Not viewing a journal note")
-      (if-let* ((current-date (vulpea-journal-note-date note))
-                (prev-date (vulpea-journal--adjacent-date current-date 'prev)))
+      (if-let* ((prev-date (vulpea-journal--adjacent-date current-date 'prev)))
           (vulpea-journal-ui--visit-date prev-date)
         (message "No previous journal entry")))))
 
 (defun vulpea-journal-ui-next ()
   "Navigate to the next journal entry from sidebar."
   (interactive)
-  (let ((note (vulpea-journal-ui--sidebar-note)))
-    (if (not (vulpea-journal-note-p note))
+  (let ((current-date (or (vulpea-journal-ui--get-active-date)
+                          (vulpea-journal-note-date
+                           (vulpea-journal-ui--sidebar-note)))))
+    (if (null current-date)
         (user-error "Not viewing a journal note")
-      (if-let* ((current-date (vulpea-journal-note-date note))
-                (next-date (vulpea-journal--adjacent-date current-date 'next)))
+      (if-let* ((next-date (vulpea-journal--adjacent-date current-date 'next)))
           (vulpea-journal-ui--visit-date next-date)
         (message "No next journal entry")))))
 
@@ -568,19 +590,19 @@ This function is idempotent."
     ;; Widget registration
     (vulpea-ui-register-widget 'journal-nav
                                :component 'vulpea-journal-widget-nav
-                               :predicate #'vulpea-journal-note-p
+                               :predicate #'vulpea-journal-ui--journal-view-p
                                :order (vulpea-journal-ui--get-order 'nav))
     (vulpea-ui-register-widget 'journal-calendar
                                :component 'vulpea-journal-widget-calendar
-                               :predicate #'vulpea-journal-note-p
+                               :predicate #'vulpea-journal-ui--journal-view-p
                                :order (vulpea-journal-ui--get-order 'calendar))
     (vulpea-ui-register-widget 'journal-created-today
                                :component 'vulpea-journal-widget-created-today
-                               :predicate #'vulpea-journal-note-p
+                               :predicate #'vulpea-journal-ui--journal-view-p
                                :order (vulpea-journal-ui--get-order 'created-today))
     (vulpea-ui-register-widget 'journal-previous-years
                                :component 'vulpea-journal-widget-previous-years
-                               :predicate #'vulpea-journal-note-p
+                               :predicate #'vulpea-journal-ui--journal-view-p
                                :order (vulpea-journal-ui--get-order 'previous-years))
     (setq vulpea-journal-ui--setup-done t)))
 

@@ -230,6 +230,26 @@ Optional DATE is used for template resolution (defaults to current time)."
       (insert (apply #'format format-string args) "\n"))))
 
 
+;;; Active Date Tracking
+
+(defvar-local vulpea-journal--active-date nil
+  "The journal date currently being viewed in this buffer.
+Set by `vulpea-journal' and `vulpea-journal-ui--visit-date'
+to track which specific day is active, especially important for
+monthly templates where multiple days share the same file.")
+
+(defun vulpea-journal--set-active-date (date &optional buffer)
+  "Set the active journal DATE in BUFFER (defaults to current buffer).
+When the sidebar is visible, refreshes it to reflect the new date."
+  (with-current-buffer (or buffer (current-buffer))
+    (setq vulpea-journal--active-date date)))
+
+(defun vulpea-journal-active-date (&optional buffer)
+  "Get the active journal date from BUFFER (defaults to current buffer)."
+  (buffer-local-value 'vulpea-journal--active-date
+                      (or buffer (current-buffer))))
+
+
 ;;; Note Identification
 
 (defun vulpea-journal-note-p (note)
@@ -494,9 +514,13 @@ Opens the note and shows vulpea-ui sidebar with journal widgets."
   (let* ((date (or date (current-time)))
          (note (vulpea-journal-note date)))
     (vulpea-visit note)
+    (vulpea-journal--set-active-date date)
     ;; Ensure sidebar is open
     (unless (vulpea-ui--sidebar-visible-p)
-      (vulpea-ui-sidebar-open))))
+      (vulpea-ui-sidebar-open))
+    ;; For same-file navigation (monthly), force sidebar refresh
+    (when (vulpea-ui--sidebar-visible-p)
+      (vulpea-ui-sidebar-refresh))))
 
 ;;;###autoload
 (defun vulpea-journal-today ()
@@ -519,19 +543,27 @@ When called interactively, prompt for date."
 
 (defun vulpea-journal--buffer-note ()
   "Get the journal note for the current buffer.
-Returns nil if current buffer is not visiting a journal note."
+For heading-level entries, uses `vulpea-journal--active-date' to find
+the specific heading note. Returns nil if not visiting a journal note."
   (when-let ((file (buffer-file-name)))
-    (car (vulpea-db-query-by-file-path file 0))))
+    (let ((active-date vulpea-journal--active-date))
+      (if (and active-date (vulpea-journal--heading-entry-p active-date))
+          ;; Heading-level entry: find by active date
+          (let ((entry-level (vulpea-journal--entry-level active-date)))
+            (vulpea-journal--find-heading-note file entry-level active-date))
+        ;; File-level entry
+        (car (vulpea-db-query-by-file-path file 0))))))
 
 ;;;###autoload
 (defun vulpea-journal-next ()
   "Navigate to the next journal entry."
   (interactive)
-  (let ((note (vulpea-journal--buffer-note)))
-    (if (not (vulpea-journal-note-p note))
+  (let ((current-date (or vulpea-journal--active-date
+                          (vulpea-journal-note-date
+                           (vulpea-journal--buffer-note)))))
+    (if (null current-date)
         (user-error "Not viewing a journal note")
-      (if-let* ((current-date (vulpea-journal-note-date note))
-                (next-date (vulpea-journal--adjacent-date current-date 'next)))
+      (if-let* ((next-date (vulpea-journal--adjacent-date current-date 'next)))
           (vulpea-journal next-date)
         (message "No next journal entry")))))
 
@@ -539,11 +571,12 @@ Returns nil if current buffer is not visiting a journal note."
 (defun vulpea-journal-previous ()
   "Navigate to the previous journal entry."
   (interactive)
-  (let ((note (vulpea-journal--buffer-note)))
-    (if (not (vulpea-journal-note-p note))
+  (let ((current-date (or vulpea-journal--active-date
+                          (vulpea-journal-note-date
+                           (vulpea-journal--buffer-note)))))
+    (if (null current-date)
         (user-error "Not viewing a journal note")
-      (if-let* ((current-date (vulpea-journal-note-date note))
-                (prev-date (vulpea-journal--adjacent-date current-date 'prev)))
+      (if-let* ((prev-date (vulpea-journal--adjacent-date current-date 'prev)))
           (vulpea-journal prev-date)
         (message "No previous journal entry")))))
 
