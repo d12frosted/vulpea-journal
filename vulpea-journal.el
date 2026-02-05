@@ -61,6 +61,7 @@
 (declare-function vulpea-journal-ui-setup "vulpea-journal-ui")
 
 (defvar vulpea-default-notes-directory)
+(defvar vulpea-db-sync-directories)
 
 
 ;;; Customization
@@ -201,7 +202,8 @@ Falls back to CREATED property if file path doesn't contain a date."
          (file-fmt (plist-get tpl :file-name)))
     (expand-file-name
      (format-time-string file-fmt date)
-     vulpea-default-notes-directory)))
+     (or vulpea-default-notes-directory
+         (car vulpea-db-sync-directories)))))
 
 (defun vulpea-journal--title-for-date (date)
   "Return title for journal note on DATE."
@@ -226,7 +228,17 @@ Returns time value or nil if date cannot be extracted."
   "Find existing journal note for DATE, or nil."
   (let ((file (vulpea-journal--file-for-date date)))
     (when (file-exists-p file)
-      (car (vulpea-db-query-by-file-path file 0)))))
+      (or (car (vulpea-db-query-by-file-path file 0))
+          ;; Fallback: try with resolved truename for symlink cases
+          ;; (e.g., macOS /var -> /private/var)
+          (let ((truename (file-truename file)))
+            (unless (string= truename file)
+              (car (vulpea-db-query-by-file-path truename 0))))
+          ;; Fallback: try with abbreviated path for databases that
+          ;; store paths with ~ instead of expanded home directory
+          (let ((abbreviated (abbreviate-file-name file)))
+            (unless (string= abbreviated file)
+              (car (vulpea-db-query-by-file-path abbreviated 0))))))))
 
 (defun vulpea-journal-note (date)
   "Get journal note for DATE, creating if needed."

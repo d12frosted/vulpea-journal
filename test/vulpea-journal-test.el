@@ -173,6 +173,139 @@ across database rebuilds."
           (should (string= (vulpea-note-id found)
                            (vulpea-note-id note))))))))
 
+(ert-deftest vulpea-journal-find-note-nil-default-directory ()
+  "Test finding journal note when vulpea-default-notes-directory is nil.
+Simulates the common case where users only set
+`vulpea-db-sync-directories' and expect
+`vulpea-default-notes-directory' to dynamically resolve.
+
+This reproduces the remaining issue #5: defcustom timing means
+`vulpea-default-notes-directory' can be nil or stale when the user
+only configures `vulpea-db-sync-directories'."
+  (let* ((temp-file (make-temp-file "vulpea-test-" nil ".db"))
+         (temp-dir (make-temp-file "vulpea-test-notes-" t))
+         (vulpea-db-location temp-file)
+         (vulpea-default-notes-directory nil)
+         (vulpea-db-sync-directories (list temp-dir)))
+    (unwind-protect
+        (progn
+          (vulpea-db-close)
+          (vulpea-db)
+          (let* ((vulpea-journal-default-template
+                  '(:file-name "journal/%Y%m%d.org"
+                    :title "%Y-%m-%d %A"
+                    :tags ("journal")))
+                 (date (encode-time 0 0 12 25 11 2024))
+                 (note (vulpea-journal-note date)))
+            (should note)
+            (should (vulpea-note-id note))
+            ;; Clear database and rebuild via full scan
+            (vulpea-db-clear)
+            (vulpea-db-sync-full-scan)
+            ;; Should still find the note after rebuild
+            (let ((found (vulpea-journal-find-note date)))
+              (should found)
+              (should (string= (vulpea-note-id found)
+                               (vulpea-note-id note))))))
+      (vulpea-db-close)
+      (when (file-exists-p temp-file)
+        (delete-file temp-file))
+      (when (file-directory-p temp-dir)
+        (delete-directory temp-dir t)))))
+
+(ert-deftest vulpea-journal-find-note-directory-mismatch ()
+  "Test finding journal note when directory paths differ in representation.
+Simulates the case where `vulpea-default-notes-directory' and
+`vulpea-db-sync-directories' use different string representations
+of the same directory (e.g., symlink vs truename on macOS)."
+  (let* ((temp-file (make-temp-file "vulpea-test-" nil ".db"))
+         (temp-dir (make-temp-file "vulpea-test-notes-" t))
+         (truename-dir (file-truename temp-dir))
+         (vulpea-db-location temp-file)
+         ;; Use original (possibly symlinked) path for notes directory
+         (vulpea-default-notes-directory temp-dir)
+         ;; Use truename for sync directories (simulates mismatch)
+         (vulpea-db-sync-directories (list truename-dir)))
+    (unwind-protect
+        (progn
+          (vulpea-db-close)
+          (vulpea-db)
+          (let* ((vulpea-journal-default-template
+                  '(:file-name "journal/%Y%m%d.org"
+                    :title "%Y-%m-%d %A"
+                    :tags ("journal")))
+                 (date (encode-time 0 0 12 25 11 2024))
+                 (note (vulpea-journal-note date)))
+            (should note)
+            (should (vulpea-note-id note))
+            ;; Clear database and rebuild via full scan
+            ;; Sync will use truename-dir, storing truename paths
+            (vulpea-db-clear)
+            (vulpea-db-sync-full-scan)
+            ;; Journal lookup uses temp-dir (non-truename)
+            ;; Should still find the note despite path difference
+            (let ((found (vulpea-journal-find-note date)))
+              (should found)
+              (should (string= (vulpea-note-id found)
+                               (vulpea-note-id note))))))
+      (vulpea-db-close)
+      (when (file-exists-p temp-file)
+        (delete-file temp-file))
+      (when (file-directory-p temp-dir)
+        (delete-directory temp-dir t)))))
+
+(ert-deftest vulpea-journal-find-note-tilde-in-directory ()
+  "Test finding journal note when sync directories use ~ notation.
+Reproduces the core issue #5 scenario: when
+`vulpea-db-sync-directories' contains \"~/notes\" instead of
+\"/home/user/notes\", the database must still find journal entries
+after a full scan rebuild."
+  (let* ((temp-file (make-temp-file "vulpea-test-" nil ".db"))
+         ;; Create temp dir under home so abbreviate-file-name
+         ;; produces ~/...  path (can't use make-temp-file because
+         ;; system temp dirs are not under home).
+         (home-dir (expand-file-name "~"))
+         (dir-name (format "vulpea-test-%s" (format-time-string "%s%N")))
+         (expanded-dir (file-name-as-directory
+                        (concat (file-name-as-directory home-dir)
+                                dir-name)))
+         (abbreviated-dir (abbreviate-file-name expanded-dir))
+         (vulpea-db-location temp-file)
+         ;; Use abbreviated (tilde) path — this is what users
+         ;; typically configure in their init files
+         (vulpea-default-notes-directory abbreviated-dir)
+         (vulpea-db-sync-directories (list abbreviated-dir)))
+    ;; Only run when abbreviation actually differs (i.e., we're
+    ;; under a real home directory)
+    (when (not (string= expanded-dir abbreviated-dir))
+      (unwind-protect
+          (progn
+            (make-directory expanded-dir t)
+            (vulpea-db-close)
+            (vulpea-db)
+            (let* ((vulpea-journal-default-template
+                    '(:file-name "journal/%Y%m%d.org"
+                      :title "%Y-%m-%d %A"
+                      :tags ("journal")))
+                   (date (encode-time 0 0 12 25 11 2024))
+                   (note (vulpea-journal-note date)))
+              (should note)
+              (should (vulpea-note-id note))
+              ;; Clear database and rebuild via full scan
+              (vulpea-db-clear)
+              (vulpea-db-sync-full-scan)
+              ;; Should find the note after rebuild despite ~/... vs
+              ;; /home/user/... path difference
+              (let ((found (vulpea-journal-find-note date)))
+                (should found)
+                (should (string= (vulpea-note-id found)
+                                 (vulpea-note-id note))))))
+        (vulpea-db-close)
+        (when (file-exists-p temp-file)
+          (delete-file temp-file))
+        (when (file-directory-p expanded-dir)
+          (delete-directory expanded-dir t))))))
+
 (ert-deftest vulpea-journal-no-overwrite-existing-file ()
   "Test that existing files not in database are not overwritten."
   (vulpea-test--with-temp-db
