@@ -327,5 +327,219 @@ after a full scan rebuild."
                          (buffer-string))
                        original-content)))))
 
+;;; Template Builder Tests
+
+(ert-deftest vulpea-journal-template-daily-defaults ()
+  "Test daily template builder produces correct defaults."
+  (let ((tpl (vulpea-journal-template-daily)))
+    (should (plist-get tpl :file-name))
+    (should (plist-get tpl :title))
+    (should (plist-get tpl :tags))
+    (should (member "journal" (plist-get tpl :tags)))
+    ;; Daily templates should not have :entry-level
+    (should-not (plist-get tpl :entry-level))))
+
+(ert-deftest vulpea-journal-template-monthly-defaults ()
+  "Test monthly template builder produces correct defaults."
+  (let ((tpl (vulpea-journal-template-monthly)))
+    (should (plist-get tpl :file-name))
+    (should (plist-get tpl :title))
+    (should (plist-get tpl :tags))
+    (should (member "journal" (plist-get tpl :tags)))
+    ;; Monthly templates must have :entry-level and :entry-title
+    (should (plist-get tpl :entry-level))
+    (should (= (plist-get tpl :entry-level) 1))
+    (should (plist-get tpl :entry-title))))
+
+(ert-deftest vulpea-journal-template-daily-overrides ()
+  "Test daily template builder accepts overrides."
+  (let ((tpl (vulpea-journal-template-daily
+              :tags '("journal" "daily")
+              :head "#+custom: header")))
+    (should (equal (plist-get tpl :tags) '("journal" "daily")))
+    (should (equal (plist-get tpl :head) "#+custom: header"))))
+
+(ert-deftest vulpea-journal-template-monthly-overrides ()
+  "Test monthly template builder accepts overrides."
+  (let ((tpl (vulpea-journal-template-monthly
+              :entry-title "%d %A"
+              :tags '("journal" "monthly"))))
+    (should (equal (plist-get tpl :entry-title) "%d %A"))
+    (should (equal (plist-get tpl :tags) '("journal" "monthly")))))
+
+;;; Template Helper Tests
+
+(ert-deftest vulpea-journal-heading-entry-p-daily ()
+  "Test heading-entry-p returns nil for daily templates."
+  (let ((vulpea-journal-default-template (vulpea-journal-template-daily)))
+    (should-not (vulpea-journal--heading-entry-p))))
+
+(ert-deftest vulpea-journal-heading-entry-p-monthly ()
+  "Test heading-entry-p returns non-nil for monthly templates."
+  (let ((vulpea-journal-default-template (vulpea-journal-template-monthly)))
+    (should (vulpea-journal--heading-entry-p))))
+
+(ert-deftest vulpea-journal-entry-title-for-date ()
+  "Test entry title generation for monthly template."
+  (let ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+        (date (encode-time 0 0 12 25 11 2024)))
+    (should (stringp (vulpea-journal--entry-title-for-date date)))
+    ;; Should contain the day number
+    (should (string-match-p "25" (vulpea-journal--entry-title-for-date date)))))
+
+;;; Monthly File Path Tests
+
+(ert-deftest vulpea-journal-monthly-file-path ()
+  "Test file path for monthly template."
+  (let ((vulpea-default-notes-directory "/test/notes/")
+        (vulpea-journal-default-template (vulpea-journal-template-monthly))
+        (date (encode-time 0 0 12 25 11 2024)))
+    ;; Monthly file should not include day in filename
+    (let ((file (vulpea-journal--file-for-date date)))
+      (should (string-match-p "2024" file))
+      (should (string-match-p "11" file))
+      ;; Should NOT match "25" as a standalone component in filename
+      ;; (the month file covers the whole month)
+      (should-not (string-match-p "2024-11-25" (file-name-nondirectory file))))))
+
+;;; Monthly Integration Tests
+
+(ert-deftest vulpea-journal-monthly-create-note ()
+  "Test creating a monthly journal note creates container and heading."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date (encode-time 0 0 12 25 11 2024)))
+      (let ((note (vulpea-journal-note date)))
+        (should note)
+        (should (vulpea-note-id note))
+        ;; Heading entry should be at entry-level (1)
+        (should (= (vulpea-note-level note) 1))
+        ;; Should have journal tag
+        (should (vulpea-journal-note-p note))))))
+
+(ert-deftest vulpea-journal-monthly-find-note ()
+  "Test finding a monthly journal note by date."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date (encode-time 0 0 12 25 11 2024)))
+      ;; Create the note
+      (let ((note (vulpea-journal-note date)))
+        (should note)
+        ;; Find the same note
+        (let ((found (vulpea-journal-find-note date)))
+          (should found)
+          (should (string= (vulpea-note-id found)
+                           (vulpea-note-id note))))))))
+
+(ert-deftest vulpea-journal-monthly-multiple-entries ()
+  "Test multiple daily entries in same monthly file."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date1 (encode-time 0 0 12 20 11 2024))
+           (date2 (encode-time 0 0 12 25 11 2024))
+           (date3 (encode-time 0 0 12 30 11 2024)))
+      ;; Create entries for three different days
+      (let ((note1 (vulpea-journal-note date1))
+            (note2 (vulpea-journal-note date2))
+            (note3 (vulpea-journal-note date3)))
+        ;; All should exist
+        (should note1)
+        (should note2)
+        (should note3)
+        ;; All different IDs
+        (should-not (string= (vulpea-note-id note1) (vulpea-note-id note2)))
+        (should-not (string= (vulpea-note-id note2) (vulpea-note-id note3)))
+        ;; All in the same file
+        (should (string= (vulpea-note-path note1) (vulpea-note-path note2)))
+        (should (string= (vulpea-note-path note2) (vulpea-note-path note3)))
+        ;; All at level 1
+        (should (= (vulpea-note-level note1) 1))
+        (should (= (vulpea-note-level note2) 1))
+        (should (= (vulpea-note-level note3) 1))
+        ;; Each can be found independently
+        (should (string= (vulpea-note-id (vulpea-journal-find-note date1))
+                         (vulpea-note-id note1)))
+        (should (string= (vulpea-note-id (vulpea-journal-find-note date2))
+                         (vulpea-note-id note2)))
+        (should (string= (vulpea-note-id (vulpea-journal-find-note date3))
+                         (vulpea-note-id note3)))))))
+
+(ert-deftest vulpea-journal-monthly-all-dates ()
+  "Test all-dates includes entries from monthly templates."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date1 (encode-time 0 0 12 20 11 2024))
+           (date2 (encode-time 0 0 12 25 11 2024)))
+      ;; Create two entries
+      (vulpea-journal-note date1)
+      (vulpea-journal-note date2)
+      ;; all-dates should return both dates
+      (let ((dates (vulpea-journal-all-dates)))
+        (should (= (length dates) 2))
+        ;; Dates should be sorted
+        (should (time-less-p (nth 0 dates) (nth 1 dates)))))))
+
+(ert-deftest vulpea-journal-monthly-note-date-extraction ()
+  "Test date extraction from monthly heading note."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date (encode-time 0 0 12 25 11 2024)))
+      (let* ((note (vulpea-journal-note date))
+             (extracted (vulpea-journal-note-date note)))
+        (should extracted)
+        (let ((decoded (decode-time extracted)))
+          (should (= (decoded-time-year decoded) 2024))
+          (should (= (decoded-time-month decoded) 11))
+          (should (= (decoded-time-day decoded) 25)))))))
+
+(ert-deftest vulpea-journal-monthly-after-db-rebuild ()
+  "Test monthly entries survive database rebuild."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date (encode-time 0 0 12 25 11 2024)))
+      (let ((note (vulpea-journal-note date)))
+        (should note)
+        ;; Clear database and rebuild
+        (vulpea-db-clear)
+        (vulpea-db-sync-full-scan)
+        ;; Should still find the note
+        (let ((found (vulpea-journal-find-note date)))
+          (should found)
+          (should (string= (vulpea-note-id found)
+                           (vulpea-note-id note))))))))
+
+(ert-deftest vulpea-journal-monthly-different-months ()
+  "Test entries in different months create different files."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (nov-date (encode-time 0 0 12 25 11 2024))
+           (dec-date (encode-time 0 0 12 15 12 2024)))
+      (let ((nov-note (vulpea-journal-note nov-date))
+            (dec-note (vulpea-journal-note dec-date)))
+        (should nov-note)
+        (should dec-note)
+        ;; Should be in different files
+        (should-not (string= (vulpea-note-path nov-note)
+                             (vulpea-note-path dec-note)))))))
+
+;;; Daily Backward Compatibility
+
+(ert-deftest vulpea-journal-daily-still-works-with-builder ()
+  "Test daily template builder creates notes same as before."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-daily))
+           (date (encode-time 0 0 12 25 11 2024)))
+      (let ((note (vulpea-journal-note date)))
+        (should note)
+        (should (vulpea-note-id note))
+        ;; Daily entries are file-level (level 0)
+        (should (= (vulpea-note-level note) 0))
+        (should (vulpea-journal-note-p note))
+        ;; Should find same note
+        (let ((found (vulpea-journal-find-note date)))
+          (should found)
+          (should (string= (vulpea-note-id found)
+                           (vulpea-note-id note))))))))
+
 (provide 'vulpea-journal-test)
 ;;; vulpea-journal-test.el ends here
