@@ -8,7 +8,7 @@
 
 ** Fixed
 
-- Fix journal entries not found after database rebuild (=vulpea-db-sync-full-scan=). The journal was using =vulpea-directory= for path computation while the sync system used =vulpea-db-sync-directories=, causing path mismatches in the database lookup. ([[https://github.com/d12frosted/vulpea-journal/issues/5][#5]])
+- Fix journal entries not found after database rebuild (=vulpea-db-sync-full-scan=). Root cause: when =vulpea-db-sync-directories= contains =~= paths (e.g., =~/notes=), the sync stored them unexpanded in the database while the journal always expanded them (e.g., =/home/user/notes=), causing exact-match lookups to fail. Fixed in vulpea by expanding paths in =vulpea-db-sync--list-org-files=. Also adds =abbreviate-file-name= and =file-truename= fallbacks in =vulpea-journal-find-note= for defense-in-depth. ([[https://github.com/d12frosted/vulpea-journal/issues/5][#5]])
 - Fix stale database connections in tests by properly closing connections between test runs.
 
 * v1.0.1 (2026-01-31)
