@@ -23,12 +23,6 @@
 (require 'vulpea-db)
 (require 'vulpea-journal)
 
-;; Declare variables for dynamic binding in lexical-binding mode
-(defvar vulpea-directory)
-(defvar vulpea-db-location)
-(defvar vulpea-db-sync-directories)
-(defvar vulpea-journal-default-template)
-
 ;;; Test Infrastructure
 
 (defmacro vulpea-test--with-temp-db (&rest body)
@@ -37,12 +31,14 @@
   `(let* ((temp-file (make-temp-file "vulpea-test-" nil ".db"))
           (temp-dir (make-temp-file "vulpea-test-notes-" t))
           (vulpea-db-location temp-file)
-          (vulpea-directory temp-dir)
+          (vulpea-default-notes-directory temp-dir)
           (vulpea-db-sync-directories (list temp-dir)))
      (unwind-protect
          (progn
-           (vulpea-db)  ;; Initialize database
+           (vulpea-db-close)  ;; Close any existing connection
+           (vulpea-db)  ;; Initialize fresh database
            ,@body)
+       (vulpea-db-close)
        (when (file-exists-p temp-file)
          (delete-file temp-file))
        (when (file-directory-p temp-dir)
@@ -52,7 +48,7 @@
 
 (ert-deftest vulpea-journal-file-path-relative ()
   "Test file path generation with relative directory."
-  (let ((vulpea-directory "/test/notes/")
+  (let ((vulpea-default-notes-directory "/test/notes/")
         (vulpea-journal-default-template '(:file-name "journal/%Y%m%d.org"
                                            :title "%Y-%m-%d %A"
                                            :tags ("journal")))
@@ -62,7 +58,7 @@
 
 (ert-deftest vulpea-journal-file-path-nested ()
   "Test file path with nested directory structure."
-  (let ((vulpea-directory "/notes/")
+  (let ((vulpea-default-notes-directory "/notes/")
         (vulpea-journal-default-template '(:file-name "journal/%Y/%m/%Y%m%d.org"
                                            :title "%Y-%m-%d %A"
                                            :tags ("journal")))
@@ -150,6 +146,32 @@
         (let ((found (vulpea-journal-find-note date)))
           (should found)
           (should (string= (vulpea-note-id found) (vulpea-note-id note))))))))
+
+(ert-deftest vulpea-journal-find-note-after-db-rebuild ()
+  "Test finding journal note after database rebuild.
+Reproduces issue #5: after clearing the database and running a full
+scan, `vulpea-journal-find-note' should still find journal entries.
+
+This verifies that the journal uses the same directory as the sync
+system (`vulpea-default-notes-directory') so paths remain consistent
+across database rebuilds."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template '(:file-name "journal/%Y%m%d.org"
+                                              :title "%Y-%m-%d %A"
+                                              :tags ("journal")))
+           (date (encode-time 0 0 12 25 11 2024)))
+      ;; Create journal entry
+      (let ((note (vulpea-journal-note date)))
+        (should note)
+        (should (vulpea-note-id note))
+        ;; Clear database and rebuild via full scan
+        (vulpea-db-clear)
+        (vulpea-db-sync-full-scan)
+        ;; Should still find the note after rebuild
+        (let ((found (vulpea-journal-find-note date)))
+          (should found)
+          (should (string= (vulpea-note-id found)
+                           (vulpea-note-id note))))))))
 
 (ert-deftest vulpea-journal-no-overwrite-existing-file ()
   "Test that existing files not in database are not overwritten."

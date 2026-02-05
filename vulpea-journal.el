@@ -60,7 +60,7 @@
 
 (declare-function vulpea-journal-ui-setup "vulpea-journal-ui")
 
-(defvar vulpea-directory)
+(defvar vulpea-default-notes-directory)
 
 
 ;;; Customization
@@ -80,7 +80,7 @@ Can be a plist or a function taking DATE and returning a plist.
 
 Required keys:
 - `:file-name' - strftime format for file path (relative to
-  `vulpea-directory')
+  `vulpea-default-notes-directory')
 - `:title' - strftime format for note title
 - `:tags' - List of tags (first tag identifies journal notes)
 
@@ -201,7 +201,7 @@ Falls back to CREATED property if file path doesn't contain a date."
          (file-fmt (plist-get tpl :file-name)))
     (expand-file-name
      (format-time-string file-fmt date)
-     vulpea-directory)))
+     vulpea-default-notes-directory)))
 
 (defun vulpea-journal--title-for-date (date)
   "Return title for journal note on DATE."
