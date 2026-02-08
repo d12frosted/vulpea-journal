@@ -410,11 +410,11 @@ an ID property and running `vulpea-db-sync'" file))
          ;; Find or create the container (file-level note)
          (container (vulpea-journal--ensure-container file date tpl)))
     ;; Create heading entry under container
+    ;; Note: no :tags here - headings inherit filetags from container
     (vulpea-create
      entry-title
      nil
      :parent container
-     :tags (plist-get tpl :tags)
      :properties `(("CREATED" . ,date-str))
      :after 'last)))
 
@@ -432,6 +432,7 @@ TPL is the journal template. Returns the container vulpea-note."
       title
       file
       :id id
+      :tags (plist-get tpl :tags)
       :head (plist-get tpl :head))
      (vulpea-db-get-by-id id))))
 
