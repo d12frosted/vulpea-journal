@@ -203,9 +203,9 @@ Notes without time appear first, then sorted by time ascending."
          (--filter (or (not vulpea-journal-ui-created-today-exclude-journal)
                        (not (vulpea-journal-note-p it))))
          (--sort (let ((time-a (vulpea-journal-ui--extract-time
-                                (cdr (assoc "CREATED" (vulpea-note-properties it)))))
+                                (alist-get 'CREATED (vulpea-note-properties it))))
                        (time-b (vulpea-journal-ui--extract-time
-                                (cdr (assoc "CREATED" (vulpea-note-properties other))))))
+                                (alist-get 'CREATED (vulpea-note-properties other)))))
                    (cond
                     ;; Both have no time - keep original order
                     ((and (null time-a) (null time-b)) nil)
@@ -406,7 +406,7 @@ ON-SELECT is callback to handle date selection."
            (lambda (n)
              (let* ((title (vulpea-note-title n))
                     (tags (vulpea-note-tags n))
-                    (created (cdr (assoc "CREATED" (vulpea-note-properties n))))
+                    (created (alist-get 'CREATED (vulpea-note-properties n)))
                     (time-str (if (and created (string-match "\\([0-9]+:[0-9]+\\)" created))
                                   (match-string 1 created)
                                 "     "))

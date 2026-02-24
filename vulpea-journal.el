@@ -183,7 +183,7 @@ Falls back to CREATED property if file path doesn't contain a date."
       (or (vulpea-journal--date-from-file path)
           ;; Fall back to CREATED property
           (let* ((props (vulpea-note-properties note))
-                 (created (cdr (assoc "CREATED" props))))
+                 (created (alist-get 'CREATED props)))
             (vulpea-journal--debug "note-date: fallback to props=%S created=%S"
                                    props created)
             (when (and created

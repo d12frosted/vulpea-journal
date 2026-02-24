@@ -327,5 +327,42 @@ after a full scan rebuild."
                          (buffer-string))
                        original-content)))))
 
+;;; Created Today Query Tests
+
+(ert-deftest vulpea-journal-ui-created-today-extracts-time ()
+  "Test that created-today query extracts CREATED time from properties.
+The CREATED property is stored in the :PROPERTIES: drawer, and
+`vulpea-note-properties' returns an alist with symbol keys.
+The query function must read the time to sort notes by creation time."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            '(:file-name "journal/%Y-%m-%d.org"
+              :title "%Y-%m-%d %A"
+              :tags ("journal")))
+           (date (encode-time 0 0 12 25 11 2024))
+           ;; Create journal entry for the date
+           (_journal (vulpea-journal-note date))
+           ;; Create two non-journal notes with CREATED property
+           (note-early (vulpea-create "Morning note" nil
+                         :tags '("project")
+                         :properties '(("CREATED" . "[2024-11-25 Mon 09:00]"))))
+           (note-late (vulpea-create "Afternoon note" nil
+                        :tags '("project")
+                        :properties '(("CREATED" . "[2024-11-25 Mon 14:30]")))))
+      (require 'vulpea-journal-ui)
+      (let* ((vulpea-journal-ui-created-today-exclude-journal t)
+             (results (vulpea-journal-ui--query-created-today date))
+             (titles (mapcar #'vulpea-note-title results)))
+        ;; Should find both non-journal notes
+        (should (= 2 (length results)))
+        ;; Should be sorted by time: 09:00 before 14:30
+        (should (equal titles '("Morning note" "Afternoon note")))
+        ;; Verify CREATED property is accessible from returned notes
+        (let* ((first-note (car results))
+               (props (vulpea-note-properties first-note))
+               (created (alist-get 'CREATED props)))
+          (should created)
+          (should (string-match-p "09:00" created)))))))
+
 (provide 'vulpea-journal-test)
 ;;; vulpea-journal-test.el ends here
