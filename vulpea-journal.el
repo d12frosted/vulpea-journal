@@ -280,8 +280,7 @@ Falls back to CREATED property in all cases."
 (defun vulpea-journal--date-from-created (note)
   "Extract date from CREATED property of NOTE."
   (let* ((props (vulpea-note-properties note))
-         (created (or (alist-get 'CREATED props)
-                      (cdr (assoc "CREATED" props)))))
+         (created (cdr (assoc "CREATED" props))))
     (vulpea-journal--debug "date-from-created: props=%S created=%S"
                            props created)
     (when (and created
@@ -349,8 +348,7 @@ Returns time value or nil if date cannot be extracted."
     (let* ((target-date-str (format-time-string "%Y-%m-%d" date))
            (notes (vulpea-journal--query-file-notes file level)))
       (--first
-       (let ((created (or (alist-get 'CREATED (vulpea-note-properties it))
-                         (cdr (assoc "CREATED" (vulpea-note-properties it))))))
+       (let ((created (cdr (assoc "CREATED" (vulpea-note-properties it)))))
          (and created (string-match-p (regexp-quote target-date-str) created)))
        notes))))
 
