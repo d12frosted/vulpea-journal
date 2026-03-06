@@ -8,9 +8,11 @@
 
 ** Features
 
+- New =vulpea-journal-tag= customization variable for configuring the journal tag. Template builders use it as the default, and =vulpea-journal-note-p= checks against it directly. ([[https://github.com/d12frosted/vulpea-journal/pull/12][#12]])
 - Monthly journal granularity: one file per month with daily entries as headings. Use =vulpea-journal-template-monthly= to create a monthly template. ([[https://github.com/d12frosted/vulpea-journal/issues/2][#2]])
 - Template builder functions: =vulpea-journal-template-daily= and =vulpea-journal-template-monthly= with sensible defaults and override support.
 - Active date tracking for sidebar widgets, ensuring correct behavior when navigating between entries in the same file.
+- Migration script now adds journal filetag to migrated files using =vulpea-buffer-tags-add=. ([[https://github.com/d12frosted/vulpea-journal/pull/12][#12]])
 
 ** Fixed
 

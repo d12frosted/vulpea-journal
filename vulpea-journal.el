@@ -70,6 +70,18 @@
   "Daily note interface for vulpea."
   :group 'vulpea)
 
+(defcustom vulpea-journal-tag "journal"
+  "Tag that identifies journal notes.
+
+This is used by `vulpea-journal-note-p' to check if a note is a
+journal note. Template builders (`vulpea-journal-template-daily',
+`vulpea-journal-template-monthly') use this as the default tag.
+
+If you use a raw plist for `vulpea-journal-default-template',
+make sure the first element of `:tags' matches this value."
+  :type 'string
+  :group 'vulpea-journal)
+
 (defcustom vulpea-journal-default-template
   '(:file-name "journal/%Y-%m-%d.org"
     :title "%Y-%m-%d %A"
@@ -83,7 +95,7 @@ Required keys:
 - `:file-name' - strftime format for file path (relative to
   `vulpea-default-notes-directory')
 - `:title' - strftime format for note title
-- `:tags' - List of tags (first tag identifies journal notes)
+- `:tags' - List of tags (first should match `vulpea-journal-tag')
 
 Optional keys (same as `vulpea-create-default-template'):
 - `:head' - Header content after #+title
@@ -128,7 +140,7 @@ Or as a function for dynamic configuration:
 (cl-defun vulpea-journal-template-daily (&key
                                          (file-name "journal/%Y-%m-%d.org")
                                          (title "%Y-%m-%d %A")
-                                         (tags '("journal"))
+                                         (tags (list vulpea-journal-tag))
                                          head body properties meta context)
   "Create a daily journal template (one file per day).
 
@@ -150,7 +162,7 @@ All parameters are optional with sensible defaults:
 (cl-defun vulpea-journal-template-monthly (&key
                                            (file-name "journal/%Y-%m.org")
                                            (title "%Y-%m")
-                                           (tags '("journal"))
+                                           (tags (list vulpea-journal-tag))
                                            (entry-level 1)
                                            (entry-title "%d %A")
                                            head body properties meta context)
@@ -184,12 +196,6 @@ All parameters are optional with sensible defaults:
   (if (functionp vulpea-journal-default-template)
       (funcall vulpea-journal-default-template date)
     vulpea-journal-default-template))
-
-(defun vulpea-journal--get-tag ()
-  "Get the primary journal tag from template.
-Uses current time for template resolution."
-  (or (car (plist-get (vulpea-journal--get-template (current-time)) :tags))
-      "journal"))
 
 (defun vulpea-journal--heading-entry-p (&optional date)
   "Return non-nil if current template uses heading-level entries.
@@ -255,7 +261,7 @@ When the sidebar is visible, refreshes it to reflect the new date."
 (defun vulpea-journal-note-p (note)
   "Return non-nil if NOTE is a journal note."
   (and note
-       (member (vulpea-journal--get-tag) (vulpea-note-tags note))))
+       (member vulpea-journal-tag (vulpea-note-tags note))))
 
 (defun vulpea-journal-note-date (note)
   "Extract date from journal NOTE.
@@ -386,7 +392,7 @@ For monthly templates, creates a heading inside the monthly container."
       (error "File %s already exists but is not in vulpea database.
 This can happen if the file was created manually or lacks required properties.
 To fix: either delete the file, or add it to vulpea by ensuring it has
-an ID property and running `vulpea-db-sync'" file))
+an ID property and running `vulpea-db-sync-full-scan'" file))
     (vulpea-journal--ensure-directory file)
     (vulpea-create
      title
@@ -440,10 +446,9 @@ TPL is the journal template. Returns the container vulpea-note."
 (defun vulpea-journal-all-dates ()
   "Return list of all dates with journal entries.
 Includes both file-level entries (daily) and heading-level entries (monthly)."
-  (let* ((tag (vulpea-journal--get-tag))
-         (notes (vulpea-db-query-by-tags-every (list tag))))
+  (let* ((notes (vulpea-db-query-by-tags-every (list vulpea-journal-tag))))
     (vulpea-journal--debug "=== all-dates ===")
-    (vulpea-journal--debug "Tag: %s" tag)
+    (vulpea-journal--debug "Tag: %s" vulpea-journal-tag)
     (vulpea-journal--debug "Notes with tag: %d" (length notes))
     (->> notes
          ;; Include file-level notes with YYYY-MM-DD in filename (daily)

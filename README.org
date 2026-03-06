@@ -359,19 +359,13 @@ Use =vulpea-journal-dates-in-range= to query entries:
 
 ** Custom journal tag
 
-If you want a different tag than ="journal"=:
+If you want a different tag than ="journal"=, set =vulpea-journal-tag=:
 
 #+begin_src emacs-lisp
-;; Daily with custom tag
-(setq vulpea-journal-default-template
-      (vulpea-journal-template-daily :tags '("daily-note")))
-
-;; Monthly with custom tag
-(setq vulpea-journal-default-template
-      (vulpea-journal-template-monthly :tags '("daily-note")))
+(setq vulpea-journal-tag "daily-note")
 #+end_src
 
-The first tag in the list is used for identification.
+Template builders (=vulpea-journal-template-daily=, =vulpea-journal-template-monthly=) use =vulpea-journal-tag= as the default tag automatically. If you use a raw plist for =vulpea-journal-default-template=, make sure the first element of =:tags= matches =vulpea-journal-tag=.
 
 * Troubleshooting
 
@@ -424,7 +418,7 @@ Additionally, if your notes lack the =CREATED= property, vulpea-journal won't fi
 
 ** Migration script
 
-If you have many existing journal files that need =:ID:=, filetags :journal: and =CREATED= properties, you can use this script to migrate them automatically.
+If you have many existing journal files that need =:ID:=, =CREATED= properties, and the journal filetag, you can use this script to migrate them automatically.
 
 *WARNING: Back up your notes before running this script!*
 
@@ -433,7 +427,9 @@ If you have many existing journal files that need =:ID:=, filetags :journal: and
   "Migrate journal files in DIRECTORY to vulpea-journal format.
 Adds :ID: property if missing.
 Adds CREATED property if missing (inferred from filename or title).
-Adds filetags :journal: if missing.
+Adds journal filetag if missing (using `vulpea-journal-tag').
+
+
 After running this, execute `vulpea-db-sync-full-scan' to index the files."
   (interactive "DJournal directory: ")
   (let* ((files (directory-files directory t "\\.org$"))
@@ -459,28 +455,12 @@ After running this, execute `vulpea-db-sync-full-scan' to index the files."
               (org-set-property "CREATED" date)
               (setq changed t)
               (message "    Added CREATED: %s" date)))
-          ;; Check/add filetags :journal:
+          ;; Check/add journal filetag
           (goto-char (point-min))
-          (let ((has-filetags (re-search-forward "^#\\+filetags:.*$" nil t)))
-            (cond
-             ;; filetags vorhanden, aber ohne :journal:
-             ((and has-filetags
-                   (not (string-match-p ":journal:" (match-string 0))))
-              (end-of-line)
-              (skip-chars-backward " \t")
-              (unless (eq (char-before) ?:)
-                (insert ":"))
-              (insert "journal:")
-              (setq changed t)
-              (message "    Added :journal: to existing filetags"))
-             ;; keine filetags-Zeile vorhanden
-             ((not has-filetags)
-              (goto-char (point-min))
-              (when (re-search-forward "^#\\+title:.*$" nil t)
-                (end-of-line)
-                (insert "\n#+filetags: :journal:"))
-              (setq changed t)
-              (message "    Added filetags"))))
+          (unless (member vulpea-journal-tag (vulpea-buffer-tags-get))
+            (vulpea-buffer-tags-add (list vulpea-journal-tag))
+            (setq changed t)
+            (message "    Added filetag: %s" vulpea-journal-tag))
           ;; Save if modified
           (if changed
               (progn
