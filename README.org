@@ -416,7 +416,7 @@ If you have existing journal files that are not properly indexed in the vulpea d
 
 To fix this, you have two options:
 
-1. *Add proper properties and sync:* Ensure each file has an =:ID:= property in its property drawer, then run =M-x vulpea-db-sync= to index them.
+1. *Add proper properties and sync:* Ensure each file has an =:ID:= property in its property drawer, then run =M-x vulpea-db-sync-full-scan= to index them.
 
 2. *Delete and recreate:* If the files don't contain important content, delete them and let vulpea-journal create new ones.
 
@@ -435,7 +435,7 @@ If you have many existing journal files that need =:ID:= and =CREATED= propertie
 Adds :ID: property if missing.
 Adds CREATED property if missing (inferred from filename or title).
 
-After running this, execute `vulpea-db-sync' to index the files."
+After running this, execute `vulpea-db-sync-full-scan' to index the files."
   (interactive "DJournal directory: ")
   (let* ((files (directory-files directory t "\\.org$"))
          (count (length files))
@@ -468,7 +468,7 @@ After running this, execute `vulpea-db-sync' to index the files."
             (setq skipped (1+ skipped)))
           (kill-buffer))))
     (message "Migration complete: %d modified, %d skipped" modified skipped)
-    (message "Run M-x vulpea-db-sync to index the migrated files.")))
+    (message "Run M-x vulpea-db-sync-full-scan to index the migrated files.")))
 
 (defun vulpea-journal-migrate--infer-date (file)
   "Infer date from FILE path or title.
@@ -500,7 +500,7 @@ Usage:
 1. Back up your journal directory
 2. Evaluate the code above
 3. Run =M-x vulpea-journal-migrate-files= and select your journal directory
-4. Run =M-x vulpea-db-sync= to index the migrated files
+4. Run =M-x vulpea-db-sync-full-scan= to index the migrated files
 
 * API Reference
 
