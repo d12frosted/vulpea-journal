@@ -424,17 +424,16 @@ Additionally, if your notes lack the =CREATED= property, vulpea-journal won't fi
 
 ** Migration script
 
-If you have many existing journal files that need =:ID:= and =CREATED= properties, you can use this script to migrate them automatically.
+If you have many existing journal files that need =:ID:=, filetags :journal: and =CREATED= properties, you can use this script to migrate them automatically.
 
 *WARNING: Back up your notes before running this script!*
 
 #+begin_src emacs-lisp
 (defun vulpea-journal-migrate-files (directory)
   "Migrate journal files in DIRECTORY to vulpea-journal format.
-
 Adds :ID: property if missing.
 Adds CREATED property if missing (inferred from filename or title).
-
+Adds filetags :journal: if missing.
 After running this, execute `vulpea-db-sync-full-scan' to index the files."
   (interactive "DJournal directory: ")
   (let* ((files (directory-files directory t "\\.org$"))
@@ -460,6 +459,28 @@ After running this, execute `vulpea-db-sync-full-scan' to index the files."
               (org-set-property "CREATED" date)
               (setq changed t)
               (message "    Added CREATED: %s" date)))
+          ;; Check/add filetags :journal:
+          (goto-char (point-min))
+          (let ((has-filetags (re-search-forward "^#\\+filetags:.*$" nil t)))
+            (cond
+             ;; filetags vorhanden, aber ohne :journal:
+             ((and has-filetags
+                   (not (string-match-p ":journal:" (match-string 0))))
+              (end-of-line)
+              (skip-chars-backward " \t")
+              (unless (eq (char-before) ?:)
+                (insert ":"))
+              (insert "journal:")
+              (setq changed t)
+              (message "    Added :journal: to existing filetags"))
+             ;; keine filetags-Zeile vorhanden
+             ((not has-filetags)
+              (goto-char (point-min))
+              (when (re-search-forward "^#\\+title:.*$" nil t)
+                (end-of-line)
+                (insert "\n#+filetags: :journal:"))
+              (setq changed t)
+              (message "    Added filetags"))))
           ;; Save if modified
           (if changed
               (progn
