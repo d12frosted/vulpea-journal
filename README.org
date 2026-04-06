@@ -53,6 +53,23 @@ vulpea-journal requires:
 (elpaca vulpea-journal)
 #+end_src
 
+*** Using Doom Emacs
+
+In =packages.el=:
+
+#+begin_src emacs-lisp
+(package! vulpea-journal)
+#+end_src
+
+In =config.el=:
+
+#+begin_src emacs-lisp
+(use-package! vulpea-journal
+  :after (vulpea vulpea-ui)
+  :config
+  (vulpea-journal-setup))
+#+end_src
+
 *** Configuration
 
 #+begin_src emacs-lisp
@@ -64,7 +81,7 @@ vulpea-journal requires:
 
 ** 2. Widgets are auto-registered
 
-Journal widgets automatically register with vulpea-ui when you load =vulpea-journal-ui=. They only appear when viewing journal notes.
+=vulpea-journal-setup= automatically loads =vulpea-journal-ui= and registers all sidebar widgets — you don't need to require it separately. Widgets only appear when viewing journal notes.
 
 Default widget order interleaves with vulpea-ui widgets:
 
