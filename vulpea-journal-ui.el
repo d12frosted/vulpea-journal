@@ -150,9 +150,12 @@ These days are also marked with a dot (·) indicator."
   :group 'vulpea-journal-ui)
 
 (defface vulpea-journal-ui-calendar-selected
-  '((t :inherit hl-line))
+  '((t :inherit highlight))
   "Face for the currently selected day in the calendar widget.
-This is the date of the journal entry you are currently viewing."
+This is the date of the journal entry you are currently viewing.
+Inherits from `highlight' (defined in faces.el, always loaded)
+rather than `hl-line', which is only defined once the optional
+hl-line library is loaded."
   :group 'vulpea-journal-ui)
 
 
