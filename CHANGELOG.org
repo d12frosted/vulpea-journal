@@ -16,6 +16,7 @@
 
 ** Fixed
 
+- Fix =:body= from monthly templates being silently dropped for heading-level entries. =vulpea-journal--create-heading-note= now passes the template =:body= through to =vulpea-create=, matching the file-level (daily) path. ([[https://github.com/d12frosted/vulpea-journal/issues/16][#16]])
 - Fix selected day not being highlighted in the calendar widget when the optional =hl-line= library is not loaded. =vulpea-journal-ui-calendar-selected= now inherits from the always-available =highlight= face instead of =hl-line=. ([[https://github.com/d12frosted/vulpea-journal/issues/14][#14]])
 - Fix outdated =vulpea-db-sync= references in README — the function was renamed to =vulpea-db-sync-full-scan= in vulpea. ([[https://github.com/d12frosted/vulpea-journal/issues/11][#11]])
 - Fix journal entries not found after database rebuild (=vulpea-db-sync-full-scan=). Root cause: when =vulpea-db-sync-directories= contains =~= paths (e.g., =~/notes=), the sync stored them unexpanded in the database while the journal always expanded them (e.g., =/home/user/notes=), causing exact-match lookups to fail. Fixed in vulpea by expanding paths in =vulpea-db-sync--list-org-files=. Also adds =abbreviate-file-name= and =file-truename= fallbacks in =vulpea-journal-find-note= for defense-in-depth. ([[https://github.com/d12frosted/vulpea-journal/issues/5][#5]])

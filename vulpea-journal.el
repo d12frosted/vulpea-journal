@@ -419,6 +419,7 @@ an ID property and running `vulpea-db-sync-full-scan'" file))
      entry-title
      nil
      :parent container
+     :body (plist-get tpl :body)
      :properties `(("CREATED" . ,date-str))
      :after 'last)))
 
