@@ -417,6 +417,23 @@ after a full scan rebuild."
         ;; Should have journal tag
         (should (vulpea-journal-note-p note))))))
 
+(ert-deftest vulpea-journal-monthly-create-note-with-body ()
+  "Test monthly heading entry includes :body from template."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly
+             :body "Morning thoughts go here."))
+           (date (encode-time 0 0 12 25 11 2024)))
+      (let ((note (vulpea-journal-note date)))
+        (should note)
+        ;; Heading entry should be at entry-level (1)
+        (should (= (vulpea-note-level note) 1))
+        ;; The :body from the template must be written into the entry
+        (with-temp-buffer
+          (insert-file-contents (vulpea-note-path note))
+          (should (string-match-p "Morning thoughts go here\\."
+                                  (buffer-string))))))))
+
 (ert-deftest vulpea-journal-monthly-find-note ()
   "Test finding a monthly journal note by date."
   (vulpea-test--with-temp-db
