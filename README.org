@@ -179,9 +179,40 @@ Monthly template parameters:
 |-----------------+--------------------+----------------------------------|
 | =:file-name=    | =journal/%Y-%m.org= | strftime format for monthly file |
 | =:title=        | =%Y-%m=             | File-level note title            |
-| =:entry-level=  | =1=                 | Heading level for daily entries  |
+| =:entry-level=  | =1=                 | Heading level for daily entries (derived when =:entry-groups= is set) |
 | =:entry-title=  | =%d %A=             | strftime format for heading      |
+| =:entry-groups= | =nil=               | Optional grouping headings (see below) |
 | =:tags=         | =("journal")=       | Tags (first one identifies journals) |
+
+By default, daily entries are placed directly under the monthly file. To nest them under intermediate grouping headings (for example, one heading per ISO week), use =:entry-groups=:
+
+#+begin_src emacs-lisp
+(setq vulpea-journal-default-template
+      (vulpea-journal-template-monthly
+       :entry-title  "%d %A"
+       :entry-groups '("week %V")
+       :body         "*** Tasks\n\n*** Notes\n"))
+#+end_src
+
+Each element of =:entry-groups= adds one heading level between the file and the daily entry. An element is either a =strftime= format string (expanded for the entry's date) or a function of one argument (the date) returning the heading title. A single spec may be given without wrapping it in a list. Group headings are created on demand and reused across days that resolve to the same title, and =:entry-level= is derived as =1 + (length entry-groups)= so lookup and creation stay in sync. The template above produces:
+
+#+begin_example
+#+title: 2026-06
+#+filetags: :journal:
+* week 24
+** 08 Monday
+*** Tasks
+*** Notes
+** 09 Tuesday
+*** Tasks
+*** Notes
+* week 25
+** 15 Monday
+*** Tasks
+*** Notes
+#+end_example
+
+Because =:body= is inserted verbatim at fixed heading levels, nest its subheadings one level below the entry (=***= for entries at level 2, as above).
 
 *** Raw template plist
 

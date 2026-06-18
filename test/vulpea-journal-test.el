@@ -367,6 +367,19 @@ after a full scan rebuild."
     (should (equal (plist-get tpl :entry-title) "%d %A"))
     (should (equal (plist-get tpl :tags) '("journal" "monthly")))))
 
+(ert-deftest vulpea-journal-template-monthly-entry-groups ()
+  "Test monthly builder derives entry-level from :entry-groups."
+  ;; A list of group specs sets entry-level to 1 + number of groups.
+  (let ((tpl (vulpea-journal-template-monthly
+              :entry-groups '("week %V"))))
+    (should (equal (plist-get tpl :entry-groups) '("week %V")))
+    (should (= (plist-get tpl :entry-level) 2)))
+  ;; A bare string spec is normalized to a single-element list.
+  (let ((tpl (vulpea-journal-template-monthly
+              :entry-groups "week %V")))
+    (should (equal (plist-get tpl :entry-groups) '("week %V")))
+    (should (= (plist-get tpl :entry-level) 2))))
+
 ;;; Template Helper Tests
 
 (ert-deftest vulpea-journal-heading-entry-p-daily ()
@@ -433,6 +446,76 @@ after a full scan rebuild."
           (insert-file-contents (vulpea-note-path note))
           (should (string-match-p "Morning thoughts go here\\."
                                   (buffer-string))))))))
+
+(ert-deftest vulpea-journal-monthly-nested-under-groups ()
+  "Test daily entries nest under date-derived group headings."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly
+             :entry-groups '("week %V")
+             :entry-title "%d %A"))
+           ;; week 24: Mon and Tue; week 25: Mon
+           (d1 (encode-time 0 0 12 8 6 2026))
+           (d2 (encode-time 0 0 12 9 6 2026))
+           (d3 (encode-time 0 0 12 15 6 2026)))
+      (let ((n1 (vulpea-journal-note d1))
+            (n2 (vulpea-journal-note d2))
+            (n3 (vulpea-journal-note d3)))
+        ;; Entries live at level 2 (under a level-1 week heading)
+        (should (= (vulpea-note-level n1) 2))
+        (should (= (vulpea-note-level n2) 2))
+        (should (= (vulpea-note-level n3) 2))
+        ;; Same ISO week -> same week heading (same outline path)
+        (should (equal (vulpea-note-outline-path n1)
+                       (vulpea-note-outline-path n2)))
+        (should (equal (vulpea-note-outline-path n1) '("week 24")))
+        ;; Different ISO week -> different week heading
+        (should (equal (vulpea-note-outline-path n3) '("week 25")))
+        ;; Week headings are reused, not duplicated: exactly two at level 1
+        (should (= (length (vulpea-db-query-by-file-path
+                            (vulpea-note-path n1) 1))
+                   2))
+        ;; Grouping headings carry no date, so they never show up as
+        ;; journal entries: all-dates lists the three days only.
+        (should (= (length (vulpea-journal-all-dates)) 3))
+        ;; Entries remain findable by date after nesting
+        (should (string= (vulpea-note-id (vulpea-journal-find-note d1))
+                         (vulpea-note-id n1)))
+        (should (string= (vulpea-note-id (vulpea-journal-find-note d2))
+                         (vulpea-note-id n2)))
+        (should (string= (vulpea-note-id (vulpea-journal-find-note d3))
+                         (vulpea-note-id n3)))))))
+
+(ert-deftest vulpea-journal-monthly-nested-multi-level ()
+  "Test entries nest under a multi-level :entry-groups chain."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly
+             :entry-groups '("%Y" "week %V")
+             :entry-title "%d %A"))
+           (d1 (encode-time 0 0 12 8 6 2026))    ; week 24
+           (d2 (encode-time 0 0 12 15 6 2026)))  ; week 25
+      ;; entry-level is derived as 1 + 2 groups = 3
+      (should (= (plist-get vulpea-journal-default-template :entry-level) 3))
+      (let ((n1 (vulpea-journal-note d1))
+            (n2 (vulpea-journal-note d2)))
+        (should (= (vulpea-note-level n1) 3))
+        (should (= (vulpea-note-level n2) 3))
+        ;; Both under the same year heading, different week headings
+        (should (equal (vulpea-note-outline-path n1) '("2026" "week 24")))
+        (should (equal (vulpea-note-outline-path n2) '("2026" "week 25")))
+        ;; One shared year heading at level 1, two week headings at level 2
+        (should (= (length (vulpea-db-query-by-file-path
+                            (vulpea-note-path n1) 1))
+                   1))
+        (should (= (length (vulpea-db-query-by-file-path
+                            (vulpea-note-path n1) 2))
+                   2))
+        ;; Entries remain findable by date
+        (should (string= (vulpea-note-id (vulpea-journal-find-note d1))
+                         (vulpea-note-id n1)))
+        (should (string= (vulpea-note-id (vulpea-journal-find-note d2))
+                         (vulpea-note-id n2)))))))
 
 (ert-deftest vulpea-journal-monthly-find-note ()
   "Test finding a monthly journal note by date."

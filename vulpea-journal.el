@@ -137,6 +137,17 @@ Or as a function for dynamic configuration:
 
 ;;; Template Builders
 
+(defun vulpea-journal--normalize-groups (groups)
+  "Normalize GROUPS into a list of group specs.
+GROUPS may be nil, a single spec (a strftime string or a function
+of one argument DATE), or a list of such specs.  A single spec is
+wrapped in a one-element list."
+  (cond
+   ((null groups) nil)
+   ((or (stringp groups) (functionp groups)) (list groups))
+   ((listp groups) groups)
+   (t (error "Invalid :entry-groups value: %S" groups))))
+
 (cl-defun vulpea-journal-template-daily (&key
                                          (file-name "journal/%Y-%m-%d.org")
                                          (title "%Y-%m-%d %A")
@@ -165,6 +176,7 @@ All parameters are optional with sensible defaults:
                                            (tags (list vulpea-journal-tag))
                                            (entry-level 1)
                                            (entry-title "%d %A")
+                                           entry-groups
                                            head body properties meta context)
   "Create a monthly journal template (one file per month).
 
@@ -176,17 +188,30 @@ All parameters are optional with sensible defaults:
 - FILE-NAME: strftime format for monthly file (default: journal/%Y-%m.org)
 - TITLE: strftime format for file-level title (default: %Y-%m)
 - TAGS: list of tags (default: (\"journal\"))
-- ENTRY-LEVEL: heading level for daily entries (default: 1)
+- ENTRY-LEVEL: heading level for daily entries (default: 1).  Ignored
+  when ENTRY-GROUPS is set, in which case it is derived (see below).
 - ENTRY-TITLE: strftime format for entry heading (default: %d %A)
+- ENTRY-GROUPS: optional grouping headings that nest the daily entry
+  deeper inside the file.  Each element produces one heading level
+  between the file and the entry and is either a strftime format
+  string (e.g. \"week %V\") or a function of one argument (DATE)
+  returning the heading title.  A single spec may be given without
+  wrapping it in a list.  When set, ENTRY-LEVEL is derived as
+  1 + number of groups so lookup and creation agree.  For example,
+  :entry-groups \\='(\"week %V\") nests each day under a \"week NN\"
+  heading and entries live at level 2.
 - HEAD, BODY, PROPERTIES, META, CONTEXT: passed to `vulpea-create'"
-  (append
-   (list :file-name file-name :title title :tags tags
-         :entry-level entry-level :entry-title entry-title)
-   (when head (list :head head))
-   (when body (list :body body))
-   (when properties (list :properties properties))
-   (when meta (list :meta meta))
-   (when context (list :context context))))
+  (let* ((groups (vulpea-journal--normalize-groups entry-groups))
+         (entry-level (if groups (1+ (length groups)) entry-level)))
+    (append
+     (list :file-name file-name :title title :tags tags
+           :entry-level entry-level :entry-title entry-title)
+     (when groups (list :entry-groups groups))
+     (when head (list :head head))
+     (when body (list :body body))
+     (when properties (list :properties properties))
+     (when meta (list :meta meta))
+     (when context (list :context context)))))
 
 
 ;;; Template Resolution
@@ -406,19 +431,66 @@ an ID property and running `vulpea-db-sync-full-scan'" file))
      :context (plist-get tpl :context))
     (vulpea-db-get-by-id id)))
 
+(defun vulpea-journal--resolve-group-title (spec date)
+  "Resolve group SPEC to a heading title for DATE.
+SPEC is either a strftime format string or a function of one
+argument (DATE) returning a string."
+  (cond
+   ((functionp spec) (funcall spec date))
+   ((stringp spec) (format-time-string spec date))
+   (t (error "Invalid :entry-groups spec: %S" spec))))
+
+(defun vulpea-journal--find-child-heading (file level title outline-path)
+  "Find heading note in FILE at LEVEL titled TITLE under OUTLINE-PATH.
+OUTLINE-PATH is the expected ancestor heading titles, outermost
+first.  Returns the matching `vulpea-note' or nil."
+  (--first
+   (and (string= (vulpea-note-title it) title)
+        (equal (vulpea-note-outline-path it) outline-path))
+   (vulpea-journal--query-file-notes file level)))
+
+(defun vulpea-journal--ensure-group-path (container date groups)
+  "Ensure the chain of GROUPS headings under CONTAINER for DATE.
+CONTAINER is the file-level container `vulpea-note'.  GROUPS is a
+list of group specs (see `vulpea-journal--resolve-group-title').
+Missing group headings are created on demand and existing ones are
+reused.  Returns the deepest container note that should parent the
+entry, which is CONTAINER itself when GROUPS is empty."
+  (let ((parent container)
+        (file (vulpea-note-path container))
+        (ancestry nil))
+    (dolist (spec (vulpea-journal--normalize-groups groups) parent)
+      (let* ((title (vulpea-journal--resolve-group-title spec date))
+             (level (1+ (vulpea-note-level parent)))
+             (existing (vulpea-journal--find-child-heading
+                        file level title (reverse ancestry))))
+        ;; Group headings carry no :tags and no CREATED property of
+        ;; their own; they inherit the file's filetags structurally,
+        ;; so date lookup never confuses them with daily entries.
+        (setq parent (or existing
+                         (vulpea-create title nil
+                                        :parent parent
+                                        :after 'last)))
+        (push title ancestry)))))
+
 (defun vulpea-journal--create-heading-note (date tpl)
-  "Create a heading-level journal note for DATE using template TPL."
+  "Create a heading-level journal note for DATE using template TPL.
+When TPL has a non-nil :entry-groups, the entry is nested under the
+chain of date-derived grouping headings (created on demand)."
   (let* ((file (vulpea-journal--file-for-date date))
          (entry-title (vulpea-journal--entry-title-for-date date))
          (date-str (format-time-string "[%Y-%m-%d]" date))
-         ;; Find or create the container (file-level note)
-         (container (vulpea-journal--ensure-container file date tpl)))
-    ;; Create heading entry under container
+         ;; Find or create the container (file-level note), then walk
+         ;; the optional chain of grouping headings for this date.
+         (container (vulpea-journal--ensure-container file date tpl))
+         (parent (vulpea-journal--ensure-group-path
+                  container date (plist-get tpl :entry-groups))))
+    ;; Create heading entry under the deepest container.
     ;; Note: no :tags here - headings inherit filetags from container
     (vulpea-create
      entry-title
      nil
-     :parent container
+     :parent parent
      :body (plist-get tpl :body)
      :properties `(("CREATED" . ,date-str))
      :after 'last)))
