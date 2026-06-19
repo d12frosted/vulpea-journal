@@ -579,6 +579,19 @@ after a full scan rebuild."
         ;; CREATED is still written by the journal.
         (should (assoc "CREATED" (vulpea-note-properties note)))))))
 
+(ert-deftest vulpea-journal-monthly-entry-context ()
+  "Test monthly entries expand template vars from :context."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly
+             :context '(:proj "ACME")
+             :properties '(("PROJECT" . "${proj}"))))
+           (date (encode-time 0 0 12 8 6 2026)))
+      (let ((note (vulpea-journal-note date)))
+        ;; ${proj} resolves from :context, same as the daily path.
+        (should (equal (cdr (assoc "PROJECT" (vulpea-note-properties note)))
+                       "ACME"))))))
+
 (ert-deftest vulpea-journal-monthly-find-note ()
   "Test finding a monthly journal note by date."
   (vulpea-test--with-temp-db
