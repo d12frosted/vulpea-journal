@@ -213,7 +213,10 @@ All parameters are optional with sensible defaults:
   spec may be given without a list.  Written to the property named by
   `vulpea-buffer-alias-property' so the entry can be linked by a short
   stamp instead of its title.
-- HEAD, BODY, PROPERTIES, META, CONTEXT: passed to `vulpea-create'"
+- BODY, PROPERTIES, CONTEXT: applied to each daily entry.
+- HEAD: applied to the monthly file (the container), not the entries.
+- META: file-level only; monthly heading entries do not carry meta,
+  as `vulpea-create' supports meta on file-level notes only."
   (let* ((groups (vulpea-journal--normalize-specs entry-groups))
          (entry-level (if groups (1+ (length groups)) entry-level)))
     (append
@@ -540,6 +543,7 @@ chain of date-derived grouping headings (created on demand)."
      :body (plist-get tpl :body)
      :properties (vulpea-journal--entry-properties
                   tpl date `(("CREATED" . ,date-str)))
+     :context (plist-get tpl :context)
      :after 'last)))
 
 (defun vulpea-journal--ensure-container (file date tpl)

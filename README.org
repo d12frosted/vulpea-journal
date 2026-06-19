@@ -185,6 +185,8 @@ Monthly template parameters:
 | =:aliases=      | =nil=               | Per-entry aliases, computed or static (see below) |
 | =:tags=         | =("journal")=       | Tags (first one identifies journals) |
 
+For monthly templates, =:body=, =:properties=, =:context=, and =:aliases= apply to each daily entry, while =:head= seeds the monthly file (the container). =:meta= is file-level only: monthly heading entries do not carry metadata, because =vulpea-create= stores metadata on file-level notes only.
+
 By default, daily entries are placed directly under the monthly file. To nest them under intermediate grouping headings (for example, one heading per ISO week), use =:entry-groups=:
 
 #+begin_src emacs-lisp
