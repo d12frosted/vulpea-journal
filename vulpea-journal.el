@@ -137,22 +137,22 @@ Or as a function for dynamic configuration:
 
 ;;; Template Builders
 
-(defun vulpea-journal--normalize-groups (groups)
-  "Normalize GROUPS into a list of group specs.
-GROUPS may be nil, a single spec (a strftime string or a function
+(defun vulpea-journal--normalize-specs (specs)
+  "Normalize SPECS into a list of template specs.
+SPECS may be nil, a single spec (a strftime string or a function
 of one argument DATE), or a list of such specs.  A single spec is
-wrapped in a one-element list."
+wrapped in a one-element list.  Shared by :entry-groups and :aliases."
   (cond
-   ((null groups) nil)
-   ((or (stringp groups) (functionp groups)) (list groups))
-   ((listp groups) groups)
-   (t (error "Invalid :entry-groups value: %S" groups))))
+   ((null specs) nil)
+   ((or (stringp specs) (functionp specs)) (list specs))
+   ((listp specs) specs)
+   (t (error "Invalid template spec list: %S" specs))))
 
 (cl-defun vulpea-journal-template-daily (&key
                                          (file-name "journal/%Y-%m-%d.org")
                                          (title "%Y-%m-%d %A")
                                          (tags (list vulpea-journal-tag))
-                                         head body properties meta context)
+                                         aliases head body properties meta context)
   "Create a daily journal template (one file per day).
 
 Returns a plist suitable for `vulpea-journal-default-template'.
@@ -161,9 +161,16 @@ All parameters are optional with sensible defaults:
 - FILE-NAME: strftime format for file path (default: journal/%Y-%m-%d.org)
 - TITLE: strftime format for note title (default: %Y-%m-%d %A)
 - TAGS: list of tags (default: (\"journal\"))
+- ALIASES: optional note aliases, computed per entry.  Each element is
+  a strftime string expanded for the entry's date (e.g. \"%Y-%m-%d\")
+  or a function of one argument (DATE) returning the alias; a single
+  spec may be given without a list.  Written to the property named by
+  `vulpea-buffer-alias-property' so the entry can be linked by a short
+  stamp instead of its title.
 - HEAD, BODY, PROPERTIES, META, CONTEXT: passed to `vulpea-create'"
   (append
    (list :file-name file-name :title title :tags tags)
+   (when aliases (list :aliases (vulpea-journal--normalize-specs aliases)))
    (when head (list :head head))
    (when body (list :body body))
    (when properties (list :properties properties))
@@ -177,7 +184,7 @@ All parameters are optional with sensible defaults:
                                            (entry-level 1)
                                            (entry-title "%d %A")
                                            entry-groups
-                                           head body properties meta context)
+                                           aliases head body properties meta context)
   "Create a monthly journal template (one file per month).
 
 Daily entries are created as headings inside the monthly file.
@@ -200,13 +207,20 @@ All parameters are optional with sensible defaults:
   1 + number of groups so lookup and creation agree.  For example,
   :entry-groups \\='(\"week %V\") nests each day under a \"week NN\"
   heading and entries live at level 2.
+- ALIASES: optional note aliases, computed per entry.  Each element is
+  a strftime string expanded for the entry's date (e.g. \"%Y-%m-%d\")
+  or a function of one argument (DATE) returning the alias; a single
+  spec may be given without a list.  Written to the property named by
+  `vulpea-buffer-alias-property' so the entry can be linked by a short
+  stamp instead of its title.
 - HEAD, BODY, PROPERTIES, META, CONTEXT: passed to `vulpea-create'"
-  (let* ((groups (vulpea-journal--normalize-groups entry-groups))
+  (let* ((groups (vulpea-journal--normalize-specs entry-groups))
          (entry-level (if groups (1+ (length groups)) entry-level)))
     (append
      (list :file-name file-name :title title :tags tags
            :entry-level entry-level :entry-title entry-title)
      (when groups (list :entry-groups groups))
+     (when aliases (list :aliases (vulpea-journal--normalize-specs aliases)))
      (when head (list :head head))
      (when body (list :body body))
      (when properties (list :properties properties))
@@ -426,19 +440,51 @@ an ID property and running `vulpea-db-sync-full-scan'" file))
      :tags (plist-get tpl :tags)
      :head (plist-get tpl :head)
      :body (plist-get tpl :body)
-     :properties (plist-get tpl :properties)
+     :properties (vulpea-journal--entry-properties tpl date nil)
      :meta (plist-get tpl :meta)
      :context (plist-get tpl :context))
     (vulpea-db-get-by-id id)))
 
-(defun vulpea-journal--resolve-group-title (spec date)
-  "Resolve group SPEC to a heading title for DATE.
-SPEC is either a strftime format string or a function of one
-argument (DATE) returning a string."
+(defun vulpea-journal--resolve-spec (spec date)
+  "Resolve template SPEC for DATE to a string.
+SPEC is either a strftime format string (expanded for DATE) or a
+function of one argument (DATE) returning a string.  Shared by
+:entry-groups and :aliases."
   (cond
    ((functionp spec) (funcall spec date))
    ((stringp spec) (format-time-string spec date))
-   (t (error "Invalid :entry-groups spec: %S" spec))))
+   (t (error "Invalid template spec: %S" spec))))
+
+(defun vulpea-journal--resolve-aliases (tpl date)
+  "Return the list of resolved alias strings for DATE from TPL.
+Each TPL :aliases spec is resolved via `vulpea-journal--resolve-spec'.
+Returns nil when TPL has no :aliases."
+  (mapcar (lambda (spec) (vulpea-journal--resolve-spec spec date))
+          (vulpea-journal--normalize-specs (plist-get tpl :aliases))))
+
+(defun vulpea-journal--alias-property (aliases)
+  "Return a one-element alist setting the alias property for ALIASES.
+The property name is `vulpea-buffer-alias-property'.  An alias that
+contains whitespace or a double quote is wrapped in double quotes,
+matching how vulpea stores and parses aliases.  Returns nil when
+ALIASES is empty."
+  (when aliases
+    (list (cons vulpea-buffer-alias-property
+                (mapconcat
+                 (lambda (alias)
+                   (if (string-match-p "[ \t\"]" alias)
+                       (format "%S" alias)
+                     alias))
+                 aliases " ")))))
+
+(defun vulpea-journal--entry-properties (tpl date base)
+  "Build the property alist for a journal entry on DATE.
+BASE is an alist of journal-managed properties (e.g. CREATED).
+Appends TPL :properties and the resolved :aliases property."
+  (append base
+          (plist-get tpl :properties)
+          (vulpea-journal--alias-property
+           (vulpea-journal--resolve-aliases tpl date))))
 
 (defun vulpea-journal--find-child-heading (file level title outline-path)
   "Find heading note in FILE at LEVEL titled TITLE under OUTLINE-PATH.
@@ -452,15 +498,15 @@ first.  Returns the matching `vulpea-note' or nil."
 (defun vulpea-journal--ensure-group-path (container date groups)
   "Ensure the chain of GROUPS headings under CONTAINER for DATE.
 CONTAINER is the file-level container `vulpea-note'.  GROUPS is a
-list of group specs (see `vulpea-journal--resolve-group-title').
+list of group specs (see `vulpea-journal--resolve-spec').
 Missing group headings are created on demand and existing ones are
 reused.  Returns the deepest container note that should parent the
 entry, which is CONTAINER itself when GROUPS is empty."
   (let ((parent container)
         (file (vulpea-note-path container))
         (ancestry nil))
-    (dolist (spec (vulpea-journal--normalize-groups groups) parent)
-      (let* ((title (vulpea-journal--resolve-group-title spec date))
+    (dolist (spec (vulpea-journal--normalize-specs groups) parent)
+      (let* ((title (vulpea-journal--resolve-spec spec date))
              (level (1+ (vulpea-note-level parent)))
              (existing (vulpea-journal--find-child-heading
                         file level title (reverse ancestry))))
@@ -492,7 +538,8 @@ chain of date-derived grouping headings (created on demand)."
      nil
      :parent parent
      :body (plist-get tpl :body)
-     :properties `(("CREATED" . ,date-str))
+     :properties (vulpea-journal--entry-properties
+                  tpl date `(("CREATED" . ,date-str)))
      :after 'last)))
 
 (defun vulpea-journal--ensure-container (file date tpl)

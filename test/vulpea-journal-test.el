@@ -517,6 +517,68 @@ after a full scan rebuild."
         (should (string= (vulpea-note-id (vulpea-journal-find-note d2))
                          (vulpea-note-id n2)))))))
 
+;;; Entry Alias Tests
+
+(ert-deftest vulpea-journal-template-aliases ()
+  "Test :aliases is normalized and stored by the template builders."
+  ;; A single spec is normalized to a one-element list.
+  (let ((tpl (vulpea-journal-template-monthly :aliases "%Y-%m-%d")))
+    (should (equal (plist-get tpl :aliases) '("%Y-%m-%d"))))
+  ;; A list is stored as-is, and daily accepts it too.
+  (let ((tpl (vulpea-journal-template-daily :aliases '("%Y-%m-%d" "alt"))))
+    (should (equal (plist-get tpl :aliases) '("%Y-%m-%d" "alt")))))
+
+(ert-deftest vulpea-journal-monthly-entry-aliases-computed ()
+  "Test monthly entries get an alias computed on the entry's date."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly :aliases '("%Y-%m-%d")))
+           (date (encode-time 0 0 12 8 6 2026)))
+      (let ((note (vulpea-journal-note date)))
+        ;; Alias reflects the entry's date, not the current date.
+        (should (member "2026-06-08" (vulpea-note-aliases note)))))))
+
+(ert-deftest vulpea-journal-daily-entry-aliases-computed ()
+  "Test daily entries get an alias computed on the entry's date."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-daily :aliases '("%Y-%m-%d")))
+           (date (encode-time 0 0 12 8 6 2026)))
+      (let ((note (vulpea-journal-note date)))
+        (should (member "2026-06-08" (vulpea-note-aliases note)))))))
+
+(ert-deftest vulpea-journal-entry-aliases-static-multiword ()
+  "Test a static multi-word alias round-trips as a single alias."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-daily :aliases '("Daily Log")))
+           (date (encode-time 0 0 12 8 6 2026)))
+      (let ((note (vulpea-journal-note date)))
+        (should (member "Daily Log" (vulpea-note-aliases note)))))))
+
+(ert-deftest vulpea-journal-entry-aliases-custom-property ()
+  "Test aliases honor a custom `vulpea-buffer-alias-property'."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-buffer-alias-property "ROAM_ALIASES")
+           (vulpea-journal-default-template
+            (vulpea-journal-template-daily :aliases '("%Y-%m-%d")))
+           (date (encode-time 0 0 12 8 6 2026)))
+      (let ((note (vulpea-journal-note date)))
+        (should (member "2026-06-08" (vulpea-note-aliases note)))
+        (should (assoc "ROAM_ALIASES" (vulpea-note-properties note)))))))
+
+(ert-deftest vulpea-journal-monthly-entry-properties ()
+  "Test monthly entries honor template :properties alongside CREATED."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly
+             :properties '(("FOO" . "bar"))))
+           (date (encode-time 0 0 12 8 6 2026)))
+      (let ((note (vulpea-journal-note date)))
+        (should (equal (cdr (assoc "FOO" (vulpea-note-properties note))) "bar"))
+        ;; CREATED is still written by the journal.
+        (should (assoc "CREATED" (vulpea-note-properties note)))))))
+
 (ert-deftest vulpea-journal-monthly-find-note ()
   "Test finding a monthly journal note by date."
   (vulpea-test--with-temp-db
