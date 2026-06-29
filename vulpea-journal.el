@@ -240,7 +240,7 @@ All parameters are optional with sensible defaults:
     vulpea-journal-default-template))
 
 (defun vulpea-journal--heading-entry-p (&optional date)
-  "Return non-nil if current template uses heading-level entries.
+  "Return non-nil if current template is configured for heading-level entries.
 Optional DATE is used for template resolution (defaults to current time)."
   (let ((tpl (vulpea-journal--get-template (or date (current-time)))))
     (plist-get tpl :entry-level)))
