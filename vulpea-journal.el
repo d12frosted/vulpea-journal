@@ -665,9 +665,17 @@ When called interactively, prompt for date."
 
 (defun vulpea-journal--read-date (prompt)
   "Read a date from user with PROMPT."
-  (let* ((org-read-date-prefer-future nil)
-         (date-string (org-read-date nil nil nil prompt)))
-    (org-time-string-to-time date-string)))
+  (minibuffer-with-setup-hook
+      (lambda ()
+        (local-set-key
+         (kbd "M-<left>") #'vulpea-journal-not-in-calendar-previous)
+        (local-set-key
+         (kbd "M-<right>") #'vulpea-journal-not-in-calendar-next))
+
+    ;; Code below is exactly the same as the original vulpea-journal--read-date function
+    (let* ((org-read-date-prefer-future nil)
+           (date-string (org-read-date nil nil nil prompt)))
+      (org-time-string-to-time date-string))))
 
 (defun vulpea-journal--buffer-note ()
   "Get the journal note for the current buffer.
@@ -748,6 +756,13 @@ Marks entries for all visible months (previous, current, next)."
                (list month day year)
                'vulpea-journal-calendar-entry-face))))))))
 
+(defun vulpea-journal--funcall-in-calendar (fn)
+  "Call FN in the calendar window during `org-read-date'.
+Falls back to `org-eval-in-calendar' on Org < 9.8."
+  (if (fboundp 'org-funcall-in-calendar)
+      (org-funcall-in-calendar fn)
+    (with-no-warnings (org-eval-in-calendar (list 'funcall fn)))))
+
 (defun vulpea-journal-calendar-open ()
   "Open journal for date at point in calendar."
   (interactive)
@@ -788,6 +803,24 @@ Marks entries for all visible months (previous, current, next)."
                                     (decoded-time-year decoded))))
       (message "No previous journal entry"))))
 
+(defun vulpea-journal-not-in-calendar-previous ()
+  "Move to previous journal entry in calendar.
+
+  This is the same as `vulpea-journal-calendar-previous', with the
+  difference that `vulpea-journal-calendar-previous' must be called from
+  the calendar buffer, while this one can be called from another buffer."
+  (interactive)
+  (vulpea-journal--funcall-in-calendar #'vulpea-journal-calendar-previous))
+
+
+(defun vulpea-journal-not-in-calendar-next ()
+  "Move to next journal entry in calendar.
+
+  This is the same as `vulpea-journal-calendar-next', with the
+  difference that `vulpea-journal-calendar-next' must be called from the
+  calendar buffer, while this one can be called from another buffer."
+  (interactive)
+  (vulpea-journal--funcall-in-calendar #'vulpea-journal-calendar-next))
 
 ;;; Calendar Minor Mode
 
