@@ -15,6 +15,7 @@
 - Template builder functions: =vulpea-journal-template-daily= and =vulpea-journal-template-monthly= with sensible defaults and override support.
 - Active date tracking for sidebar widgets, ensuring correct behavior when navigating between entries in the same file.
 - Migration script now adds journal filetag to migrated files using =vulpea-buffer-tags-add=. ([[https://github.com/d12frosted/vulpea-journal/pull/12][#12]])
+- Added keybindings =M-<left>= and =M-<right>= to navigate between dates with existing journal entries in =vulpea-journal-date=. ([[https://github.com/d12frosted/vulpea-journal/issues/23][#23]])
 
 ** Fixed
 
