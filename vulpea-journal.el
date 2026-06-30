@@ -759,6 +759,8 @@ Marks entries for all visible months (previous, current, next)."
 (defun vulpea-journal--funcall-in-calendar (fn)
   "Call FN in the calendar window during `org-read-date'.
 Falls back to `org-eval-in-calendar' on Org < 9.8."
+  (unless (get-buffer-window calendar-buffer t)
+    (user-error "Only available while reading a date"))
   (if (fboundp 'org-funcall-in-calendar)
       (org-funcall-in-calendar fn)
     (with-no-warnings (org-eval-in-calendar (list 'funcall fn)))))
