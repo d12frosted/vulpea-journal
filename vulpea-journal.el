@@ -668,9 +668,9 @@ When called interactively, prompt for date."
   (minibuffer-with-setup-hook
       (lambda ()
         (local-set-key
-         (kbd "M-<left>") #'vulpea-journal-not-in-calendar-previous)
+         (kbd "M-<left>") #'vulpea-journal-date-previous)
         (local-set-key
-         (kbd "M-<right>") #'vulpea-journal-not-in-calendar-next))
+         (kbd "M-<right>") #'vulpea-journal-date-next))
 
     ;; Code below is exactly the same as the original vulpea-journal--read-date function
     (let* ((org-read-date-prefer-future nil)
@@ -803,22 +803,15 @@ Falls back to `org-eval-in-calendar' on Org < 9.8."
                                     (decoded-time-year decoded))))
       (message "No previous journal entry"))))
 
-(defun vulpea-journal-not-in-calendar-previous ()
-  "Move to previous journal entry in calendar.
-
-  This is the same as `vulpea-journal-calendar-previous', with the
-  difference that `vulpea-journal-calendar-previous' must be called from
-  the calendar buffer, while this one can be called from another buffer."
+(defun vulpea-journal-date-previous ()
+  "Move to the previous date that has a journal entry.
+Intended for use while reading a date with `vulpea-journal-date'."
   (interactive)
   (vulpea-journal--funcall-in-calendar #'vulpea-journal-calendar-previous))
 
-
-(defun vulpea-journal-not-in-calendar-next ()
-  "Move to next journal entry in calendar.
-
-  This is the same as `vulpea-journal-calendar-next', with the
-  difference that `vulpea-journal-calendar-next' must be called from the
-  calendar buffer, while this one can be called from another buffer."
+(defun vulpea-journal-date-next ()
+  "Move to the next date that has a journal entry.
+Intended for use while reading a date with `vulpea-journal-date'."
   (interactive)
   (vulpea-journal--funcall-in-calendar #'vulpea-journal-calendar-next))
 
