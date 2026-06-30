@@ -672,7 +672,6 @@ When called interactively, prompt for date."
         (local-set-key
          (kbd "M-<right>") #'vulpea-journal-date-next))
 
-    ;; Code below is exactly the same as the original vulpea-journal--read-date function
     (let* ((org-read-date-prefer-future nil)
            (date-string (org-read-date nil nil nil prompt)))
       (org-time-string-to-time date-string))))
@@ -816,6 +815,7 @@ Intended for use while reading a date with `vulpea-journal-date'."
 Intended for use while reading a date with `vulpea-journal-date'."
   (interactive)
   (vulpea-journal--funcall-in-calendar #'vulpea-journal-calendar-next))
+
 
 ;;; Calendar Minor Mode
 
