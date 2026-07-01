@@ -2,6 +2,8 @@
 
 * Unreleased
 
+* v1.1.0 (2026-07-01)
+
 ** Breaking Changes
 
 - Replaced =vulpea-directory= with =vulpea-default-notes-directory= for journal file path resolution. If you previously set =vulpea-directory=, use =vulpea-default-notes-directory= instead (which defaults to the first entry in =vulpea-db-sync-directories=).
