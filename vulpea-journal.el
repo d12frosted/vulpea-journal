@@ -6,7 +6,7 @@
 ;; Author: Boris Buliga <boris@d12frosted.io>
 ;; Maintainer: Boris Buliga <boris@d12frosted.io>
 ;; Version: 1.1.0
-;; Package-Requires: ((emacs "29.1") (vulpea "2.0.0") (vulpea-ui "1.0.0") (dash "2.20.0"))
+;; Package-Requires: ((emacs "29.1") (vulpea "2.5.0") (vulpea-ui "1.1.0") (vui "1.3.0") (dash "2.20.0"))
 ;; Keywords: org-mode, roam, convenience
 ;; URL: https://github.com/d12frosted/vulpea-journal
 ;;
