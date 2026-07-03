@@ -2,6 +2,8 @@
 
 * Unreleased
 
+* v1.1.1 (2026-07-03)
+
 ** Changed
 
 - Bump minimum dependency versions to =vulpea= 2.5.0 and =vulpea-ui= 1.1.0. Also declare =vui= 1.3.0 explicitly in =Package-Requires=: =vulpea-journal-ui= requires it directly (=vui-defcomponent=, =vui-button=, etc.), so it should not be relied on as a transitive dependency of =vulpea-ui=.
