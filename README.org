@@ -85,16 +85,16 @@ In =config.el=:
 
 Default widget order interleaves with vulpea-ui widgets:
 
-| Widget           | Order | Appears...          |
-|------------------+-------+---------------------|
-| journal-nav      |    50 | Before stats        |
-| stats            |   100 | (vulpea-ui)         |
-| journal-calendar |   150 | After stats         |
-| outline          |   200 | (vulpea-ui)         |
-| backlinks        |   300 | (vulpea-ui)         |
-| created-today    |   350 | After backlinks     |
-| previous-years   |   360 | After created-today |
-| links            |   400 | (vulpea-ui)         |
+| Widget                 | Order | Appears...                  |
+|------------------------+-------+-----------------------------|
+| journal-nav            |    50 | Before stats                |
+| stats                  |   100 | (vulpea-ui)                 |
+| journal-calendar       |   150 | After stats                 |
+| outline                |   200 | (vulpea-ui)                 |
+| backlinks              |   300 | (vulpea-ui)                 |
+| journal-created-today  |   350 | After backlinks             |
+| journal-previous-years |   360 | After journal-created-today |
+| links                  |   400 | (vulpea-ui)                 |
 
 To customize the order, see [[*Widget Order Configuration][Widget Order Configuration]] below.
 
@@ -308,6 +308,8 @@ Customize where journal widgets appear relative to vulpea-ui widgets:
         (previous-years . 360)))
 #+end_src
 
+Note that =vulpea-journal-ui-widget-orders= uses short keys (=nav=, =calendar=, =created-today=, =previous-years=), and it is read once, when the widgets are registered. So set it *before* calling =vulpea-journal-setup= (e.g. via =:custom= in =use-package=).
+
 Example: Move calendar before stats:
 
 #+begin_src emacs-lisp
@@ -321,6 +323,12 @@ Example: Move calendar before stats:
 #+end_src
 
 Reference orders for vulpea-ui widgets: stats=100, outline=200, backlinks=300, links=400.
+
+If you want to change the order *after* the widgets are already registered, use =vulpea-ui-widget-set= instead. It operates on vulpea-ui's widget registry, where journal widgets are registered under their full names: =journal-nav=, =journal-calendar=, =journal-created-today=, =journal-previous-years=.
+
+#+begin_src emacs-lisp
+(vulpea-ui-widget-set 'journal-calendar :order 90)  ; now before stats
+#+end_src
 
 * Commands
 

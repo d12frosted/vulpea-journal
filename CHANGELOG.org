@@ -2,6 +2,10 @@
 
 * Unreleased
 
+** Fixed
+
+- Fix widget names in the README widget order table: registered names are =journal-created-today= and =journal-previous-years=, not =created-today= and =previous-years=. Also document that =vulpea-journal-ui-widget-orders= (short keys, read at registration time) and =vulpea-ui-widget-set= (full =journal-*= names, works on live registry) are two different ways to control widget order. ([[https://github.com/d12frosted/vulpea-journal/issues/29][#29]])
+
 * v1.1.1 (2026-07-03)
 
 ** Changed
