@@ -466,7 +466,7 @@ ON-SELECT is callback to handle date selection."
          (visit-note (lambda ()
                        (let ((main-win (vulpea-ui--get-main-window)))
                          (when main-win (select-window main-win))
-                         (vulpea-visit note)))))
+                         (vulpea-journal-ui--visit-date date)))))
     (vui-vstack
      (vui-hstack
       :spacing 1
