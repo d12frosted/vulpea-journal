@@ -716,6 +716,48 @@ the specific heading note. Returns nil if not visiting a journal note."
         (message "No previous journal entry")))))
 
 
+;;; Capture Integration
+
+(declare-function org-capture-target-buffer "org-capture" (file))
+(declare-function org-find-entry-with-id "org" (ident))
+
+;;;###autoload
+(defun vulpea-journal-capture-target (&optional date)
+  "Set buffer and point to the journal note for DATE for `org-capture'.
+
+Use this as a `(function ...)' target in `org-capture-templates' to
+capture straight into the journal without opening the vulpea-ui sidebar.
+The note for DATE (today when DATE is nil) is created on demand, so the
+first capture of a day also registers the note in the vulpea database.
+
+Point placement follows the active template, so `entry' captures land
+where you would expect:
+
+- daily (file-level) templates: point goes to the top of the file and
+  `org-capture' appends the entry as a new top-level heading;
+- monthly (heading-level) templates: point goes onto the day's heading,
+  so the entry nests as a child of that day.
+
+The function only positions point; the capture type (`entry', `item',
+`plain', ...) and content come from your template."
+  (require 'org-capture)
+  (let* ((date (or date (current-time)))
+         (note (vulpea-journal-note date))
+         (file (vulpea-note-path note)))
+    (set-buffer (org-capture-target-buffer file))
+    (unless (derived-mode-p 'org-mode)
+      (org-mode))
+    (widen)
+    (if (> (or (vulpea-note-level note) 0) 0)
+        ;; Heading-level entry (monthly): land on the day's heading so
+        ;; `org-capture' treats it as the parent and nests the capture.
+        (goto-char (or (org-find-entry-with-id (vulpea-note-id note))
+                       (point-max)))
+      ;; File-level entry (daily): land at the top, a non-heading
+      ;; position, so `org-capture' appends a top-level heading at end.
+      (goto-char (point-min)))))
+
+
 ;;; Calendar Integration
 
 (defface vulpea-journal-calendar-entry-face
