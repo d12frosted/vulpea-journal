@@ -378,18 +378,18 @@ Add a capture template that uses it as a =(function ...)= target:
 (add-to-list 'org-capture-templates
              '("j" "Journal" entry
                (function vulpea-journal-capture-target)
-               "* %U %?"))
+               "* %<%H:%M> %?"))
 #+end_src
 
-The same template works for both daily and monthly journals: the target reads your =vulpea-journal-default-template= and positions point accordingly.
+The same template works for both daily and monthly journals: the target reads your =vulpea-journal-default-template= and positions point accordingly. The heading is prefixed with just the time (=%<%H:%M>=) because the date is already implied by the file (daily) or the day heading (monthly), so a full timestamp would be redundant.
 
 For a *daily* template (one file per day), an =entry= capture is appended as a new top-level heading at the end of today's file:
 
 #+begin_example
 #+title: 2026-07-23 Thursday
 #+filetags: :journal:
-* Morning thought
-* Evening thought
+* 08:15 Morning thought
+* 21:40 Evening thought
 #+end_example
 
 For a *monthly* template (one file per month, days as headings), the entry nests as a child of today's day heading, so you do not need to narrow to it yourself:
@@ -398,8 +398,8 @@ For a *monthly* template (one file per month, days as headings), the entry nests
 #+title: 2026-07
 #+filetags: :journal:
 * 23 Thursday
-** First quick note
-** Second quick note
+** 09:12 First quick note
+** 14:30 Second quick note
 #+end_example
 
 The function only positions point, so the capture =type= (=entry=, =item=, =plain=, ...) and the content come entirely from your template. It also accepts an optional =DATE= argument if you want to capture into a specific day instead of today.
