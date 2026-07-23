@@ -716,5 +716,73 @@ after a full scan rebuild."
           (should (string= (vulpea-note-id found)
                            (vulpea-note-id note))))))))
 
+;;; Capture Target Tests
+
+(require 'org-capture)
+
+(defun vulpea-journal-test--file-contents (file)
+  "Return current contents of FILE, saving any live buffer first."
+  (let ((buf (get-file-buffer file)))
+    (when (and buf (buffer-modified-p buf))
+      (with-current-buffer buf (save-buffer))))
+  (with-temp-buffer
+    (insert-file-contents file)
+    (buffer-string)))
+
+(ert-deftest vulpea-journal-capture-target-daily ()
+  "Daily capture lands as a top-level heading in the day's file."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-daily))
+           (date (encode-time 0 0 12 25 11 2024))
+           (org-capture-templates
+            `(("j" "Journal" entry
+               (function ,(lambda () (vulpea-journal-capture-target date)))
+               "* CAPTURED DAILY"
+               :immediate-finish t))))
+      (org-capture nil "j")
+      (let ((content (vulpea-journal-test--file-contents
+                      (vulpea-journal--file-for-date date))))
+        ;; Appended as a top-level heading (not nested).
+        (should (string-match-p "^\\* CAPTURED DAILY" content))))))
+
+(ert-deftest vulpea-journal-capture-target-monthly ()
+  "Monthly capture nests as a child of the day's heading."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date (encode-time 0 0 12 25 11 2024))
+           (org-capture-templates
+            `(("j" "Journal" entry
+               (function ,(lambda () (vulpea-journal-capture-target date)))
+               "* CAPTURED MONTHLY"
+               :immediate-finish t))))
+      (org-capture nil "j")
+      (let ((content (vulpea-journal-test--file-contents
+                      (vulpea-journal--file-for-date date))))
+        ;; Day heading at level 1, capture nested as its level-2 child.
+        (should (string-match-p "^\\* 25 Monday" content))
+        (should (string-match-p "^\\*\\* CAPTURED MONTHLY" content))
+        ;; The child must come after (below) the day heading.
+        (should (< (string-match "^\\* 25 Monday" content)
+                   (string-match "^\\*\\* CAPTURED MONTHLY" content)))))))
+
+(ert-deftest vulpea-journal-capture-target-creates-and-registers-note ()
+  "First capture of a day creates the note and registers it in the DB."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-daily))
+           (date (encode-time 0 0 12 25 11 2024))
+           (org-capture-templates
+            `(("j" "Journal" entry
+               (function ,(lambda () (vulpea-journal-capture-target date)))
+               "* CAPTURED"
+               :immediate-finish t))))
+      ;; No note before capture.
+      (should-not (vulpea-journal-find-note date))
+      (org-capture nil "j")
+      ;; The day note exists and is a proper journal note in the DB.
+      (let ((found (vulpea-journal-find-note date)))
+        (should found)
+        (should (vulpea-note-id found))
+        (should (vulpea-journal-note-p found))))))
+
 (provide 'vulpea-journal-test)
 ;;; vulpea-journal-test.el ends here

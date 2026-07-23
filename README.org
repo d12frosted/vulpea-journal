@@ -368,6 +368,48 @@ Days with journal entries are highlighted in the calendar.
 
 The minor mode is automatically enabled in calendar buffers. You can toggle it with =M-x vulpea-journal-calendar-mode= if needed.
 
+* Capture
+
+Sometimes you just want to jot something into today's note without the sidebar and its widgets popping up. =vulpea-journal-capture-target= is an =org-capture= target function for exactly that. It creates today's note on demand (so the first capture of the day also registers it in the vulpea database) and moves point into place. It never touches the vulpea-ui sidebar.
+
+Add a capture template that uses it as a =(function ...)= target:
+
+#+begin_src emacs-lisp
+(add-to-list 'org-capture-templates
+             '("j" "Journal" entry
+               (function vulpea-journal-capture-target)
+               "* %U %?"))
+#+end_src
+
+The same template works for both daily and monthly journals: the target reads your =vulpea-journal-default-template= and positions point accordingly.
+
+For a *daily* template (one file per day), an =entry= capture is appended as a new top-level heading at the end of today's file:
+
+#+begin_example
+#+title: 2026-07-23 Thursday
+#+filetags: :journal:
+* Morning thought
+* Evening thought
+#+end_example
+
+For a *monthly* template (one file per month, days as headings), the entry nests as a child of today's day heading, so you do not need to narrow to it yourself:
+
+#+begin_example
+#+title: 2026-07
+#+filetags: :journal:
+* 23 Thursday
+** First quick note
+** Second quick note
+#+end_example
+
+The function only positions point, so the capture =type= (=entry=, =item=, =plain=, ...) and the content come entirely from your template. It also accepts an optional =DATE= argument if you want to capture into a specific day instead of today.
+
+If you would rather just visit today's note and write in it directly (no capture buffer, still no sidebar), skip the template and call:
+
+#+begin_src emacs-lisp
+(vulpea-visit (vulpea-journal-note (current-time)))
+#+end_src
+
 * Widgets Reference
 
 ** vulpea-journal-widget-nav
@@ -594,6 +636,9 @@ Usage:
 ;; Note retrieval
 (vulpea-journal-note date)          ; Get/create journal for DATE
 (vulpea-journal-find-note date)     ; Find existing journal (no create)
+
+;; Capture
+(vulpea-journal-capture-target)     ; `org-capture' target: point in today's note
 
 ;; Queries
 (vulpea-journal-all-dates)          ; All dates with journals

@@ -2,6 +2,10 @@
 
 * Unreleased
 
+** Features
+
+- New =vulpea-journal-capture-target= function for capturing straight into the journal via =org-capture=, without opening the vulpea-ui sidebar. Use it as a =(function ...)= target in =org-capture-templates=. It creates today's note on demand (registering it in the database on the first capture of the day) and positions point so that =entry= captures append as a top-level heading for daily templates, or nest under the day's heading for monthly templates. Accepts an optional =DATE= argument to capture into a specific day. ([[https://github.com/d12frosted/vulpea-journal/issues/34][#34]])
+
 ** Fixed
 
 - Fix visiting a note from the Previous Years widget not setting the active date, which left the sidebar showing the old date. The widget now navigates via =vulpea-journal-ui--visit-date= like the rest of the sidebar. Thanks to [[https://github.com/drcxd][@drcxd]]. ([[https://github.com/d12frosted/vulpea-journal/pull/31][#31]])
