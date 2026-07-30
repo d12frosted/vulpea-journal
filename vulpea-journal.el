@@ -148,6 +148,16 @@ wrapped in a one-element list.  Shared by :entry-groups and :aliases."
    ((listp specs) specs)
    (t (error "Invalid template spec list: %S" specs))))
 
+(defun vulpea-journal--normalize-entry-order (order)
+  "Normalize the :entry-order template value ORDER.
+Returns `oldest-first' or `newest-first'; nil defaults to
+`oldest-first'.  Signals an error on any other value."
+  (pcase order
+    ('nil 'oldest-first)
+    ((or 'oldest-first 'newest-first) order)
+    (_ (error "Invalid :entry-order: %S (expected oldest-first or newest-first)"
+              order))))
+
 (cl-defun vulpea-journal-template-daily (&key
                                          (file-name "journal/%Y-%m-%d.org")
                                          (title "%Y-%m-%d %A")
@@ -184,6 +194,7 @@ All parameters are optional with sensible defaults:
                                            (entry-level 1)
                                            (entry-title "%d %A")
                                            entry-groups
+                                           entry-order
                                            aliases head body properties meta context)
   "Create a monthly journal template (one file per month).
 
@@ -207,6 +218,15 @@ All parameters are optional with sensible defaults:
   1 + number of groups so lookup and creation agree.  For example,
   :entry-groups \\='(\"week %V\") nests each day under a \"week NN\"
   heading and entries live at level 2.
+- ENTRY-ORDER: direction in which day entries are kept inside the
+  file.  `oldest-first' (default) keeps the oldest day at the top and
+  new days are added at the bottom; `newest-first' keeps the newest
+  day at the top, so the latest entry is visible without scrolling.
+  Insertion is date-aware in both directions: an entry created for a
+  past date is placed between its date neighbors rather than at the
+  edge of the file.  With ENTRY-GROUPS, newly created group headings
+  follow the same direction; group headings carry no date, so their
+  placement is positional (prepend or append at creation time).
 - ALIASES: optional note aliases, computed per entry.  Each element is
   a strftime string expanded for the entry's date (e.g. \"%Y-%m-%d\")
   or a function of one argument (DATE) returning the alias; a single
@@ -217,12 +237,16 @@ All parameters are optional with sensible defaults:
 - HEAD: applied to the monthly file (the container), not the entries.
 - META: file-level only; monthly heading entries do not carry meta,
   as `vulpea-create' supports meta on file-level notes only."
+  ;; Reject invalid values at construction time rather than on first
+  ;; entry creation.
+  (vulpea-journal--normalize-entry-order entry-order)
   (let* ((groups (vulpea-journal--normalize-specs entry-groups))
          (entry-level (if groups (1+ (length groups)) entry-level)))
     (append
      (list :file-name file-name :title title :tags tags
            :entry-level entry-level :entry-title entry-title)
      (when groups (list :entry-groups groups))
+     (when entry-order (list :entry-order entry-order))
      (when aliases (list :aliases (vulpea-journal--normalize-specs aliases)))
      (when head (list :head head))
      (when body (list :body body))
@@ -498,13 +522,67 @@ first.  Returns the matching `vulpea-note' or nil."
         (equal (vulpea-note-outline-path it) outline-path))
    (vulpea-journal--query-file-notes file level)))
 
-(defun vulpea-journal--ensure-group-path (container date groups)
+(defun vulpea-journal--sibling-entries (parent)
+  "Return notes that are direct children of PARENT.
+PARENT is a `vulpea-note': the monthly container or the deepest
+grouping heading.  Children are queried from the database, which
+`vulpea-create' updates synchronously, so entries created moments
+ago are visible."
+  (let ((path (if (= (vulpea-note-level parent) 0)
+                  nil
+                (append (vulpea-note-outline-path parent)
+                        (list (vulpea-note-title parent))))))
+    (--filter (equal (vulpea-note-outline-path it) path)
+              (vulpea-journal--query-file-notes
+               (vulpea-note-path parent)
+               (1+ (vulpea-note-level parent))))))
+
+(defun vulpea-journal--entry-after (parent date order)
+  "Return `:after' placement for a new entry on DATE under PARENT.
+ORDER is a normalized :entry-order value (`oldest-first' or
+`newest-first').  The result is suitable for `vulpea-create':
+`last' to append, nil to insert as first child, or a sibling ID to
+insert after that sibling's subtree.
+
+Placement keeps sibling day entries sorted by date in the direction
+given by ORDER, so an entry created for a past date lands between
+its date neighbors instead of at the edge of the file.  Siblings
+without a CREATED date (e.g. manually added headings) are ignored."
+  (let* ((day (format-time-string "%Y-%m-%d" date))
+         (dated (-keep
+                 (lambda (note)
+                   (when-let* ((d (vulpea-journal--date-from-created note)))
+                     (cons (format-time-string "%Y-%m-%d" d) note)))
+                 (vulpea-journal--sibling-entries parent)))
+         (newer (--filter (string> (car it) day) dated))
+         (older (--filter (string< (car it) day) dated)))
+    (if (eq order 'newest-first)
+        ;; Descending file: insert after the closest newer sibling,
+        ;; or as first child when DATE is the newest so far.
+        (when newer
+          (vulpea-note-id
+           (cdr (car (-sort (lambda (a b) (string< (car a) (car b)))
+                            newer)))))
+      ;; Ascending file: append when DATE is the newest so far (the
+      ;; common case), otherwise insert after the closest older
+      ;; sibling, falling back to first child when DATE is the oldest.
+      (cond
+       ((null newer) 'last)
+       ((null older) nil)
+       (t (vulpea-note-id
+           (cdr (car (-sort (lambda (a b) (string> (car a) (car b)))
+                            older)))))))))
+
+(defun vulpea-journal--ensure-group-path (container date groups order)
   "Ensure the chain of GROUPS headings under CONTAINER for DATE.
 CONTAINER is the file-level container `vulpea-note'.  GROUPS is a
 list of group specs (see `vulpea-journal--resolve-spec').
 Missing group headings are created on demand and existing ones are
-reused.  Returns the deepest container note that should parent the
-entry, which is CONTAINER itself when GROUPS is empty."
+reused.  ORDER is a normalized :entry-order value; group headings
+carry no date, so a new group is simply prepended for
+`newest-first' and appended otherwise.  Returns the deepest
+container note that should parent the entry, which is CONTAINER
+itself when GROUPS is empty."
   (let ((parent container)
         (file (vulpea-note-path container))
         (ancestry nil))
@@ -519,21 +597,28 @@ entry, which is CONTAINER itself when GROUPS is empty."
         (setq parent (or existing
                          (vulpea-create title nil
                                         :parent parent
-                                        :after 'last)))
+                                        :after (if (eq order 'newest-first)
+                                                   nil
+                                                 'last))))
         (push title ancestry)))))
 
 (defun vulpea-journal--create-heading-note (date tpl)
   "Create a heading-level journal note for DATE using template TPL.
 When TPL has a non-nil :entry-groups, the entry is nested under the
-chain of date-derived grouping headings (created on demand)."
+chain of date-derived grouping headings (created on demand).
+Placement among siblings honors the template :entry-order (see
+`vulpea-journal-template-monthly')."
   (let* ((file (vulpea-journal--file-for-date date))
          (entry-title (vulpea-journal--entry-title-for-date date))
          (date-str (format-time-string "[%Y-%m-%d]" date))
+         ;; Validate the order before touching any file.
+         (order (vulpea-journal--normalize-entry-order
+                 (plist-get tpl :entry-order)))
          ;; Find or create the container (file-level note), then walk
          ;; the optional chain of grouping headings for this date.
          (container (vulpea-journal--ensure-container file date tpl))
          (parent (vulpea-journal--ensure-group-path
-                  container date (plist-get tpl :entry-groups))))
+                  container date (plist-get tpl :entry-groups) order)))
     ;; Create heading entry under the deepest container.
     ;; Note: no :tags here - headings inherit filetags from container
     (vulpea-create
@@ -544,7 +629,7 @@ chain of date-derived grouping headings (created on demand)."
      :properties (vulpea-journal--entry-properties
                   tpl date `(("CREATED" . ,date-str)))
      :context (plist-get tpl :context)
-     :after 'last)))
+     :after (vulpea-journal--entry-after parent date order))))
 
 (defun vulpea-journal--ensure-container (file date tpl)
   "Ensure monthly container file exists at FILE for DATE.
