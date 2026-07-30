@@ -5,9 +5,11 @@
 ** Features
 
 - New =vulpea-journal-capture-target= function for capturing straight into the journal via =org-capture=, without opening the vulpea-ui sidebar. Use it as a =(function ...)= target in =org-capture-templates=. It creates today's note on demand (registering it in the database on the first capture of the day) and positions point so that =entry= captures append as a top-level heading for daily templates, or nest under the day's heading for monthly templates. Accepts an optional =DATE= argument to capture into a specific day. ([[https://github.com/d12frosted/vulpea-journal/issues/34][#34]])
+- Monthly templates can keep the newest day at the top of the file via the new =:entry-order= key of =vulpea-journal-template-monthly= (=oldest-first= by default, =newest-first= to reverse). Insertion is date-aware in both directions, so an entry created for a past date lands between its date neighbors instead of at the edge of the file. With =:entry-groups=, newly created group headings follow the same direction. ([[https://github.com/d12frosted/vulpea-journal/issues/37][#37]])
 
 ** Fixed
 
+- Fix a back-dated entry (created by visiting a past date) being appended at the bottom of the monthly file regardless of its date. It is now inserted between its date neighbors, keeping the file in date order. ([[https://github.com/d12frosted/vulpea-journal/issues/37][#37]])
 - Fix visiting a note from the Previous Years widget not setting the active date, which left the sidebar showing the old date. The widget now navigates via =vulpea-journal-ui--visit-date= like the rest of the sidebar. Thanks to [[https://github.com/drcxd][@drcxd]]. ([[https://github.com/d12frosted/vulpea-journal/pull/31][#31]])
 - Fix widget names in the README widget order table: registered names are =journal-created-today= and =journal-previous-years=, not =created-today= and =previous-years=. Also document that =vulpea-journal-ui-widget-orders= (short keys, read at registration time) and =vulpea-ui-widget-set= (full =journal-*= names, works on live registry) are two different ways to control widget order. ([[https://github.com/d12frosted/vulpea-journal/issues/29][#29]])
 

@@ -44,6 +44,21 @@
        (when (file-directory-p temp-dir)
          (delete-directory temp-dir t)))))
 
+(defun vulpea-journal-test--file-contents (file)
+  "Return current contents of FILE, saving any live buffer first."
+  (let ((buf (get-file-buffer file)))
+    (when (and buf (buffer-modified-p buf))
+      (with-current-buffer buf (save-buffer))))
+  (with-temp-buffer
+    (insert-file-contents file)
+    (buffer-string)))
+
+(defun vulpea-journal-test--heading-pos (content heading)
+  "Return position of HEADING regexp in CONTENT, failing if absent."
+  (let ((pos (string-match heading content)))
+    (should pos)
+    pos))
+
 ;;; Journal File Path Tests
 
 (ert-deftest vulpea-journal-file-path-relative ()
@@ -380,6 +395,19 @@ after a full scan rebuild."
     (should (equal (plist-get tpl :entry-groups) '("week %V")))
     (should (= (plist-get tpl :entry-level) 2))))
 
+(ert-deftest vulpea-journal-template-monthly-entry-order ()
+  "Test :entry-order is stored and validated by the monthly builder."
+  ;; Default: no :entry-order key, behavior is oldest-first.
+  (let ((tpl (vulpea-journal-template-monthly)))
+    (should-not (plist-member tpl :entry-order)))
+  ;; Explicit values are stored as-is.
+  (let ((tpl (vulpea-journal-template-monthly :entry-order 'newest-first)))
+    (should (eq (plist-get tpl :entry-order) 'newest-first)))
+  (let ((tpl (vulpea-journal-template-monthly :entry-order 'oldest-first)))
+    (should (eq (plist-get tpl :entry-order) 'oldest-first)))
+  ;; Invalid value fails at template construction time.
+  (should-error (vulpea-journal-template-monthly :entry-order 'append)))
+
 ;;; Template Helper Tests
 
 (ert-deftest vulpea-journal-heading-entry-p-daily ()
@@ -639,6 +667,142 @@ after a full scan rebuild."
         (should (string= (vulpea-note-id (vulpea-journal-find-note date3))
                          (vulpea-note-id note3)))))))
 
+;;; Entry Order Tests
+
+(ert-deftest vulpea-journal-monthly-oldest-first-appends ()
+  "Test default order appends new days at the bottom of the file."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date1 (encode-time 0 0 12 20 11 2024))
+           (date2 (encode-time 0 0 12 25 11 2024))
+           (date3 (encode-time 0 0 12 30 11 2024)))
+      ;; Created in chronological order, as days pass.
+      (vulpea-journal-note date1)
+      (vulpea-journal-note date2)
+      (vulpea-journal-note date3)
+      (let* ((content (vulpea-journal-test--file-contents
+                       (vulpea-journal--file-for-date date1)))
+             (p20 (vulpea-journal-test--heading-pos content "^\\* 20 Wednesday"))
+             (p25 (vulpea-journal-test--heading-pos content "^\\* 25 Monday"))
+             (p30 (vulpea-journal-test--heading-pos content "^\\* 30 Saturday")))
+        (should (< p20 p25))
+        (should (< p25 p30))))))
+
+(ert-deftest vulpea-journal-monthly-oldest-first-backdated ()
+  "Test default order places a back-dated day between its neighbors."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template (vulpea-journal-template-monthly))
+           (date-new (encode-time 0 0 12 25 11 2024))
+           (date-old (encode-time 0 0 12 10 11 2024))
+           (date-mid (encode-time 0 0 12 18 11 2024)))
+      ;; Today's entry exists first; older days are visited afterwards.
+      (vulpea-journal-note date-new)
+      (vulpea-journal-note date-old)
+      (vulpea-journal-note date-mid)
+      (let* ((content (vulpea-journal-test--file-contents
+                       (vulpea-journal--file-for-date date-new)))
+             (p10 (vulpea-journal-test--heading-pos content "^\\* 10 Sunday"))
+             (p18 (vulpea-journal-test--heading-pos content "^\\* 18 Monday"))
+             (p25 (vulpea-journal-test--heading-pos content "^\\* 25 Monday")))
+        ;; Chronological despite creation order 25, 10, 18.
+        (should (< p10 p18))
+        (should (< p18 p25)))
+      ;; All entries remain findable by date.
+      (should (vulpea-journal-find-note date-new))
+      (should (vulpea-journal-find-note date-old))
+      (should (vulpea-journal-find-note date-mid)))))
+
+(ert-deftest vulpea-journal-monthly-newest-first-order ()
+  "Test newest-first keeps the most recent day at the top of the file."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly :entry-order 'newest-first))
+           (date1 (encode-time 0 0 12 20 11 2024))
+           (date2 (encode-time 0 0 12 25 11 2024))
+           (date3 (encode-time 0 0 12 30 11 2024)))
+      ;; Created in chronological order, as days pass.
+      (vulpea-journal-note date1)
+      (vulpea-journal-note date2)
+      (vulpea-journal-note date3)
+      (let* ((content (vulpea-journal-test--file-contents
+                       (vulpea-journal--file-for-date date1)))
+             (p20 (vulpea-journal-test--heading-pos content "^\\* 20 Wednesday"))
+             (p25 (vulpea-journal-test--heading-pos content "^\\* 25 Monday"))
+             (p30 (vulpea-journal-test--heading-pos content "^\\* 30 Saturday")))
+        ;; Newest day first.
+        (should (< p30 p25))
+        (should (< p25 p20)))
+      ;; All entries remain findable by date.
+      (should (vulpea-journal-find-note date1))
+      (should (vulpea-journal-find-note date2))
+      (should (vulpea-journal-find-note date3)))))
+
+(ert-deftest vulpea-journal-monthly-newest-first-backdated ()
+  "Test newest-first places a back-dated day between its neighbors."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly :entry-order 'newest-first))
+           (date-new (encode-time 0 0 12 25 11 2024))
+           (date-old (encode-time 0 0 12 10 11 2024))
+           (date-mid (encode-time 0 0 12 18 11 2024)))
+      ;; Today's entry exists first; older days are visited afterwards.
+      (vulpea-journal-note date-new)
+      (vulpea-journal-note date-old)
+      (vulpea-journal-note date-mid)
+      (let* ((content (vulpea-journal-test--file-contents
+                       (vulpea-journal--file-for-date date-new)))
+             (p10 (vulpea-journal-test--heading-pos content "^\\* 10 Sunday"))
+             (p18 (vulpea-journal-test--heading-pos content "^\\* 18 Monday"))
+             (p25 (vulpea-journal-test--heading-pos content "^\\* 25 Monday")))
+        ;; Reverse chronological despite creation order 25, 10, 18.
+        (should (< p25 p18))
+        (should (< p18 p10))))))
+
+(ert-deftest vulpea-journal-monthly-newest-first-groups ()
+  "Test newest-first orders group headings and entries within groups."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            (vulpea-journal-template-monthly
+             :entry-groups '("week %V")
+             :entry-order 'newest-first))
+           (d1 (encode-time 0 0 12 8 6 2026))    ; week 24, Monday
+           (d2 (encode-time 0 0 12 9 6 2026))    ; week 24, Tuesday
+           (d3 (encode-time 0 0 12 15 6 2026)))  ; week 25, Monday
+      (let ((n1 (vulpea-journal-note d1))
+            (n2 (vulpea-journal-note d2))
+            (n3 (vulpea-journal-note d3)))
+        ;; Nesting is unchanged: entries live under their week heading.
+        (should (equal (vulpea-note-outline-path n1) '("week 24")))
+        (should (equal (vulpea-note-outline-path n2) '("week 24")))
+        (should (equal (vulpea-note-outline-path n3) '("week 25")))
+        (let* ((content (vulpea-journal-test--file-contents
+                         (vulpea-note-path n1)))
+               (pw24 (vulpea-journal-test--heading-pos content "^\\* week 24"))
+               (pw25 (vulpea-journal-test--heading-pos content "^\\* week 25"))
+               (p08 (vulpea-journal-test--heading-pos content "^\\*\\* 08 Monday"))
+               (p09 (vulpea-journal-test--heading-pos content "^\\*\\* 09 Tuesday")))
+          ;; The newer week heading sits above the older one.
+          (should (< pw25 pw24))
+          ;; Within a week, the newer day sits above the older one.
+          (should (< p09 p08)))
+        ;; All entries remain findable by date.
+        (should (vulpea-journal-find-note d1))
+        (should (vulpea-journal-find-note d2))
+        (should (vulpea-journal-find-note d3))))))
+
+(ert-deftest vulpea-journal-monthly-entry-order-invalid ()
+  "Test an invalid :entry-order in a raw template plist errors at creation."
+  (vulpea-test--with-temp-db
+    (let* ((vulpea-journal-default-template
+            '(:file-name "journal/%Y-%m.org"
+              :title "%Y-%m"
+              :tags ("journal")
+              :entry-level 1
+              :entry-title "%d %A"
+              :entry-order prepend))
+           (date (encode-time 0 0 12 25 11 2024)))
+      (should-error (vulpea-journal-note date)))))
+
 (ert-deftest vulpea-journal-monthly-all-dates ()
   "Test all-dates includes entries from monthly templates."
   (vulpea-test--with-temp-db
@@ -719,15 +883,6 @@ after a full scan rebuild."
 ;;; Capture Target Tests
 
 (require 'org-capture)
-
-(defun vulpea-journal-test--file-contents (file)
-  "Return current contents of FILE, saving any live buffer first."
-  (let ((buf (get-file-buffer file)))
-    (when (and buf (buffer-modified-p buf))
-      (with-current-buffer buf (save-buffer))))
-  (with-temp-buffer
-    (insert-file-contents file)
-    (buffer-string)))
 
 (ert-deftest vulpea-journal-capture-target-daily ()
   "Daily capture lands as a top-level heading in the day's file."

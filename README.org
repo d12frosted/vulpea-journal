@@ -182,6 +182,7 @@ Monthly template parameters:
 | =:entry-level=  | =1=                 | Heading level for daily entries (derived when =:entry-groups= is set) |
 | =:entry-title=  | =%d %A=             | strftime format for heading      |
 | =:entry-groups= | =nil=               | Optional grouping headings (see below) |
+| =:entry-order=  | =oldest-first=      | Direction of day entries in the file (see below) |
 | =:aliases=      | =nil=               | Per-entry aliases, computed or static (see below) |
 | =:tags=         | =("journal")=       | Tags (first one identifies journals) |
 
@@ -216,6 +217,28 @@ Each element of =:entry-groups= adds one heading level between the file and the 
 #+end_example
 
 Because =:body= is inserted verbatim at fixed heading levels, nest its subheadings one level below the entry (=***= for entries at level 2, as above).
+
+*** Entry order
+
+By default the monthly file reads chronologically: the oldest day sits at the top and new days are added at the bottom. Set =:entry-order= to =newest-first= to keep the most recent day at the top instead. This is useful on mobile, where reaching today's entry otherwise means scrolling through the whole month:
+
+#+begin_src emacs-lisp
+(setq vulpea-journal-default-template
+      (vulpea-journal-template-monthly
+       :entry-order 'newest-first))
+#+end_src
+
+#+begin_example
+#+title: 2026-07
+#+filetags: :journal:
+* 23 Thursday
+* 18 Saturday
+* 10 Friday
+#+end_example
+
+Insertion is date-aware in both directions: creating an entry for a past date (say, visiting July 15 with the file above) places it between its date neighbors instead of at the edge of the file. Only the day headings are ordered this way; whatever you add inside a day keeps its usual order (for captures, org-capture's =:prepend= flag controls that).
+
+With =:entry-groups=, newly created group headings follow the same direction. Group headings carry no date, so their placement is positional: a group created for a back-dated entry is prepended (or appended) rather than sorted.
 
 *** Entry aliases
 
