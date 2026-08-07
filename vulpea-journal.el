@@ -896,6 +896,7 @@ Falls back to `org-eval-in-calendar' on Org < 9.8."
   (interactive)
   (let ((date (calendar-cursor-to-date t)))
     (when date
+      (calendar-exit)
       (vulpea-journal (encode-time 0 0 0
                                    (nth 1 date)   ; day
                                    (nth 0 date)   ; month
