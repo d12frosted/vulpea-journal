@@ -9,6 +9,7 @@
 
 ** Fixed
 
+- Close the calendar window before opening a journal note from the calendar (=j= in =vulpea-journal-calendar-mode=). Previously the note took over the calendar's window, and with a =display-buffer-alist= that routes journal files to a dedicated tab, the calendar was left open in the previous tab. Thanks to [[https://github.com/darcamo][@darcamo]]. ([[https://github.com/d12frosted/vulpea-journal/pull/39][#39]])
 - Fix a back-dated entry (created by visiting a past date) being appended at the bottom of the monthly file regardless of its date. It is now inserted between its date neighbors, keeping the file in date order. ([[https://github.com/d12frosted/vulpea-journal/issues/37][#37]])
 - Fix visiting a note from the Previous Years widget not setting the active date, which left the sidebar showing the old date. The widget now navigates via =vulpea-journal-ui--visit-date= like the rest of the sidebar. Thanks to [[https://github.com/drcxd][@drcxd]]. ([[https://github.com/d12frosted/vulpea-journal/pull/31][#31]])
 - Fix widget names in the README widget order table: registered names are =journal-created-today= and =journal-previous-years=, not =created-today= and =previous-years=. Also document that =vulpea-journal-ui-widget-orders= (short keys, read at registration time) and =vulpea-ui-widget-set= (full =journal-*= names, works on live registry) are two different ways to control widget order. ([[https://github.com/d12frosted/vulpea-journal/issues/29][#29]])
